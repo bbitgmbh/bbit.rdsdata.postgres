@@ -9,10 +9,7 @@ see https://github.com/jeremydaly/data-api-client#enabling-data-api
 
 
 ## Performance
-Benchmarks are ToDo, but here is what we observed manually:
-
-- on first query there we observed an overhead of 200-300ms (probalby startup of container which transforms your http request into native database request)
-- on following query overhead is around 10-50ms, depending on result size
+ToDo
 
 ## How to setup AWS Data API
 https://github.com/jeremydaly/data-api-client#enabling-data-api

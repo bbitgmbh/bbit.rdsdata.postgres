@@ -1,8 +1,8 @@
 import { ClientConfig, QueryArrayConfig, QueryArrayResult, QueryConfig, QueryResult, QueryResultRow, Submittable } from 'pg';
 import { SecretsManager } from 'aws-sdk';
-import * as dataApiClient from 'data-api-client';
 import { isFunction, isString } from 'lodash';
 import { EventEmitter } from 'events';
+import { AwsDataApi } from './aws-data-api';
 
 export class Connection extends EventEmitter {}
 
@@ -104,13 +104,16 @@ export class Client extends EventEmitter {
 
   connect(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
-      this._client = dataApiClient.default({
+      this._client = new AwsDataApi({
         ...this.dataApiGetAWSConfig(),
+        formatOptions: {
+          stringifyArrays: true,
+        },
       });
     };
 
     if (callback) {
-      promise().then(
+      return promise().then(
         () => callback(null),
         (err) => callback(err),
       );
@@ -132,8 +135,9 @@ export class Client extends EventEmitter {
     const promise = async (): Promise<any> => {
       switch (true) {
         case isString(query):
-          const result = await this._client.query(query);
-          console.log('query string', query, valuesOrCallback, result.records);
+          // console.log('query string', query, valuesOrCallback);
+          const result = await this._client.query(query, valuesOrCallback);
+          // console.log('query string', query, valuesOrCallback, result.records);
           return {
             rowCount: result.records?.length,
             rows: result.records || [],
@@ -146,8 +150,11 @@ export class Client extends EventEmitter {
     };
 
     if (callback) {
-      promise().then(
-        (result) => callback(null, result),
+      return promise().then(
+        (result) => {
+          callback(null, result);
+          return result;
+        },
         (err) => callback(err, null),
       );
     }
@@ -176,7 +183,7 @@ export class Client extends EventEmitter {
     throw new Error('not implemented');
   }
 
-  /*
+  /* ToDo: alert when someone subscribes to those events
   on(event: 'drain' | 'error' | 'notice' | 'notification' | 'end', listener: (param?: Error | Notification) => void): this {
     console.log('on ', event, listener);
     return this;
@@ -194,7 +201,7 @@ export class Client extends EventEmitter {
     };
 
     if (callback) {
-      promise().then(
+      return promise().then(
         () => callback(null),
         (err) => callback(err),
       );

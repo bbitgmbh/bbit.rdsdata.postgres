@@ -1,5 +1,5 @@
 {
-  "name": "@bbitgmbh/bbit.postgresql.rds",
+  "name": "@bbitgmbh/bbit.rdsdata.postgres",
   "version": "0.1.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

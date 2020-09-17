@@ -17,10 +17,12 @@ describe('Simulate raw postgres client', () => {
       dialectModule: lib,
     });
 
+    await sequelize.authenticate();
+
     class User extends Model {
       public id!: number; // Note that the `null assertion` `!` is required in strict mode.
       public name!: string;
-      public preferredName!: string | null; // for nullable fields
+      public age!: number | null; // for nullable fields
     }
 
     User.init(
@@ -34,8 +36,8 @@ describe('Simulate raw postgres client', () => {
           type: new DataTypes.STRING(128),
           allowNull: false,
         },
-        preferredName: {
-          type: new DataTypes.STRING(128),
+        age: {
+          type: new DataTypes.INTEGER(),
           allowNull: true,
         },
       },
@@ -45,17 +47,18 @@ describe('Simulate raw postgres client', () => {
       },
     );
 
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
 
     const newUser = await User.create({
       name: 'Johnny',
-      preferredName: 'John',
+      age: 30,
     });
-    console.log(newUser.id, newUser.name, newUser.preferredName);
+    console.log(newUser.id, newUser.name, newUser.age);
 
     const foundUser = await User.findOne({ where: { name: 'Johnny' } });
     expect(foundUser).toBeTruthy();
-    console.log(foundUser.name);
+    expect(foundUser.name).toBe('Johnny');
+    expect(foundUser.id).toBeGreaterThan(0);
 
     await sequelize.close();
   });

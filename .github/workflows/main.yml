@@ -101,7 +101,7 @@ jobs:
           path: ./dist
 
       - name: Publish package
-        run: yarn publish --access public
+        run: yarn publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
 

@@ -7,8 +7,10 @@
   "private": false,
   "keywords": [
     "rdsdata",
-    "aws-aurora",
-    "postgres"
+    "postgres",
+    "aws",
+    "rds",
+    "aurora"
   ],
   "scripts": {
     "clean": "rimraf coverage dist junit.xml",

@@ -1,8 +1,5 @@
 # bbit.rdsdata.postgres
 
-![Main](https://github.com/bbitgmbh/bbit.rdsdata.postgres/workflows/Main/badge.svg)
-[![codecov](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres/branch/master/graph/badge.svg)](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres)
-
 ***WARNING - WORK IN PROGRESS***
 
 The goal of this project is to provide a node-postgres compatible client that connects to the AWS Aurora Postgres database over the AWS RDS Data HTTP API. This way we can connect node-postgres supporting libraries like ORMs to an AWS RDS database without the need for a proper VPC setup. It just uses HTTP with AWS IAM authentication, as we know it from AWS-SDK, S3, DynamoDB, etc.
@@ -115,6 +112,9 @@ If you wanna go around all those challenges, there is the AWS RDS Data API, whic
 This project tries to solve those challenges by providing the missing piece of software to combine classic node-postgres with RDS Data HTTP API.
 
 ## Limitations and Issues
+![Main](https://github.com/bbitgmbh/bbit.rdsdata.postgres/workflows/Main/badge.svg)
+[![codecov](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres/branch/master/graph/badge.svg)](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres)
+
 We are in the process to find and fix them. If you find an issue, please provide detailed info. Pull requests are very welcome.
 
 ## Performance

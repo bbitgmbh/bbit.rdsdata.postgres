@@ -22,6 +22,10 @@ export class Utils {
     return typeof val === 'string';
   }
 
+  static isFunction(val: any): boolean {
+    return typeof val === 'function';
+  }
+
   static isObject(val: any): boolean {
     return typeof val === 'object';
   }

@@ -1,6 +1,6 @@
-# bbit.postgresql.rds
+# bbit.rdsdata.postgres
 
-WARNING - WORK IN PROGRESS
+***WARNING - WORK IN PROGRESS***
 
 The goal of this project is to provide a node-postgres compatible client that connects to the AWS Aurora Postgres database over the AWS RDS Data HTTP API. This way we can connect node-postgres supporting libraries like ORMs to an AWS RDS database without the need for a proper VPC setup. It just uses HTTP with AWS IAM authentication, as we know it from AWS-SDK, S3, DynamoDB, etc.
 
@@ -10,7 +10,7 @@ The goal of this project is to provide a node-postgres compatible client that co
   * Support for named parameters with double point sign
   * Support for positional parameters with dollar sign
   * Support for transactions
-* TypeScript support (I rewrote and extended the great work of https://github.com/jeremydaly/data-api-client in typescript)
+* TypeScript support
 * General RDS Data API Client with
   * automatic SQL and parameters preparation to AWS format
   * automatic response parsing from AWS format
@@ -115,6 +115,10 @@ We are in the process to find and fix them. If you find an issue, please provide
 
 ## How to setup AWS RDS Data API
 See https://github.com/jeremydaly/data-api-client#enabling-data-api
+
+## Acknowledgments
+
+* I rewrote and extended the great work of https://github.com/jeremydaly/data-api-client in typescript and with focus for postgresql compatibilty.
 
 ## License
 MIT

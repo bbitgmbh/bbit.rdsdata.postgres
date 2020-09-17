@@ -5,12 +5,22 @@
   "license": "MIT",
   "private": false,
   "scripts": {
-    "test": "jest"
+    "clean": "rimraf coverage dist junit.xml",
+    "test": "jest",
+    "lint": "eslint \"src/**/*.ts\"",
+    "types": "tsc --emitDeclarationOnly",
+    "bundle:node": "rollup -c rollup.config.js",
+    "bundle:browser": "webpack --config webpack.config.js",
+    "bundle": "run-p bundle:*",
+    "build": "run-s clean bundle types",
+    "yalc": "yarn build && yalc push",
+    "bbitprecommittemp": "run-p lint test build"
   },
   "dependencies": {
-    "data-api-client": "^1.1.0",
-    "lodash": "^4.17.20",
     "sqlstring": "^2.3.2"
+  },
+  "peerDependencies": {
+    "aws-sdk": "^2.753.0"
   },
   "devDependencies": {
     "@types/jest": "^26.0.13",

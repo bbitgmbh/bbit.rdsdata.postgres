@@ -431,7 +431,7 @@ export class AwsDataApi {
     }
   }
 
-  /* async batch(..._args) {
+  /* ToDo async batch(..._args) {
     // Flatten array if nested arrays (fixes #30)
     const args = Array.isArray(_args[0]) ? Utils.flatten(_args) : _args;
 

@@ -1,8 +1,8 @@
 import { ClientConfig, QueryArrayConfig, QueryArrayResult, QueryConfig, QueryResult, QueryResultRow, Submittable } from 'pg';
 import { SecretsManager } from 'aws-sdk';
-import { isFunction, isString } from 'lodash';
 import { EventEmitter } from 'events';
 import { AwsDataApi } from './aws-data-api';
+import { Utils } from './utils';
 
 export class Connection extends EventEmitter {}
 
@@ -21,7 +21,7 @@ export class Client extends EventEmitter {
       return;
     }
 
-    if (isString(config)) {
+    if (Utils.isString(config)) {
       // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}
       const url = new URL(config);
       if (url.protocol !== 'awsrds:') {
@@ -127,14 +127,14 @@ export class Client extends EventEmitter {
     valuesOrCallback?: any,
     callback?: (err: Error, result: any) => void,
   ): Promise<QueryArrayResult<any> | QueryResultRow> {
-    if (isFunction(valuesOrCallback)) {
+    if (Utils.isFunction(valuesOrCallback)) {
       callback = valuesOrCallback;
       valuesOrCallback = undefined;
     }
 
     const promise = async (): Promise<any> => {
       switch (true) {
-        case isString(query):
+        case Utils.isString(query):
           // console.log('query string', query, valuesOrCallback);
           const result = await this._client.query(query, valuesOrCallback);
           // console.log('query string', query, valuesOrCallback, result.records);

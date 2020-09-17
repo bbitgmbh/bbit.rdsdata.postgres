@@ -1,7 +1,7 @@
 # bbit.rdsdata.postgres
 
-![Main](https://github.com/bbitgmbh/bbit.swiss-qr-bill/workflows/Main/badge.svg)
-[![codecov](https://codecov.io/gh/bbitgmbh/bbit.swiss-qr-bill/branch/master/graph/badge.svg)](https://codecov.io/gh/bbitgmbh/bbit.swiss-qr-bill)
+![Main](https://github.com/bbitgmbh/bbit.rdsdata.postgres/workflows/Main/badge.svg)
+[![codecov](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres/branch/master/graph/badge.svg)](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres)
 
 ***WARNING - WORK IN PROGRESS***
 

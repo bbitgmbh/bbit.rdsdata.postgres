@@ -7,8 +7,8 @@ The goal of this project is to provide a node-postgres compatible client that co
 ## Features
 
 * node-postgres compatible client with
-  * Support for named parameters
-  * Support for positional parameters
+  * Support for named parameters with double point sign
+  * Support for positional parameters with dollar sign
   * Support for transactions
 * TypeScript support (I rewrote and extended the great work of https://github.com/jeremydaly/data-api-client in typescript)
 * General RDS Data API Client with
@@ -102,10 +102,10 @@ If you wanna go around all those challenges, there is the AWS RDS Data API, whic
 2. transactions do have a dedicated API, where you start a transaction, get a transaction id, run queries with this transaction id, and then either commit or rollback
 3. when a DDL statement terminates before it is finished running, it can result in errors and possibly corrupted data structures. To continue running a statement after a call time out, we need to specify the "continue-after-timeout" option.
 
-This project tries to solve those challenges to get around the other ones.
+This project tries to solve those challenges by providing the missing piece of software to combine classic node-postgres with RDS Data HTTP API.
 
-## Limitations
-We are in the process to find and fix them
+## Limitations and Issues
+We are in the process to find and fix them. If you find an issue, please provide detailed info. Pull requests are very welcome.
 
 ## Performance
 * Reuse HTTP-Connections with keep-alive

@@ -21,10 +21,17 @@ The goal of this project is to provide a node-postgres compatible client that co
 
 ## How to use - Examples
 
+### Install
+
+```
+npm i @bbitgmbh/bbit.rdsdata.postgres aws-sdk --save
+```
+
+
 ### as a node-postgres replacement
 
 ```
-import { Client } from 'bbit.rdsdata.postgres';
+import { Client } from '@bbitgmbh/bbit.rdsdata.postgres';
 
 // we introduced a special connection string url for this wrapper to be compatible with existing libraries:
 const client = new Client(`awsrds://${databaseName}:${awsSecretName}@${awsRegion}.${awsAccount}.aws/${awsRdsClustername}`);
@@ -45,7 +52,7 @@ await client.end();
 ### with Sequlize ORM
 
 ```
-import * as pg from 'bbit.rdsdata.postgres';
+import * as pg from '@bbitgmbh/bbit.rdsdata.postgres';
 
 const connectionParams = (new pg.Client(`awsrds://${databaseName}:${awsSecretName}@${awsRegion}.${awsAccount}.aws/${awsRdsClustername}`)).dataApiRetrievePostgresDataApiClientConfig();
 

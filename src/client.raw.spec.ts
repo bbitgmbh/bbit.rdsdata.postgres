@@ -34,7 +34,19 @@ describe('Simulate raw postgres client', () => {
     await client.connect();
     const res = await client.query("SELECT ARRAY['key', 'value', 'key key', 'value value'] as stringArrayOne");
 
-    expect(res.rows[0].stringarrayone).toEqual(['key', 'value', 'key key', 'value value']);
+    // default setting of pg-client seems to be a stringified array
+    expect(res.rows[0].stringarrayone).toEqual('["key","value","key key","value value"]');
+
+    await client.end();
+  });
+
+  test('query with positional parameters', async () => {
+    const client = new DataApiClient(dbUrl);
+
+    await client.connect();
+    const res = await client.query('select * from information_schema.tables where table_name = $1 ', ['pg_tables']);
+
+    expect(res.rows[0].table_name).toEqual('pg_tables');
 
     await client.end();
   });

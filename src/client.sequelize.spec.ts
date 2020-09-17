@@ -6,7 +6,7 @@ const dbUrl = process.env.AURORA_TEST_DB_URL;
 console.log(dbUrl);
 
 describe('Simulate raw postgres client', () => {
-  test('simple string query', async () => {
+  test('create table, insert and retrieve a record', async () => {
     const client = new lib.Client(dbUrl);
     const options = client.dataApiRetrievePostgresDataApiClientConfig();
     console.log(options);
@@ -56,5 +56,7 @@ describe('Simulate raw postgres client', () => {
     const foundUser = await User.findOne({ where: { name: 'Johnny' } });
     expect(foundUser).toBeTruthy();
     console.log(foundUser.name);
+
+    await sequelize.close();
   });
 });

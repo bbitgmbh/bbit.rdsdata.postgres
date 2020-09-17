@@ -35,7 +35,7 @@ export class AwsDataApi {
   }
 
   // Prepare parameters
-  static processParams(sql, sqlParams, paramsToProcess, formatOptions, row = 0) {
+  static processParams(sql: string, sqlParams, paramsToProcess, formatOptions, row = 0) {
     return {
       processedParams: paramsToProcess.reduce((acc, p) => {
         if (Array.isArray(p)) {
@@ -72,13 +72,47 @@ export class AwsDataApi {
   }
 
   // Get all the sql parameters and assign them types
-  static parseSqlParams(sql: string) {
-    // TODO: probably need to remove comments from the sql
-    // TODO: placeholders?
-    // sql.match(/\:{1,2}\w+|\?+/g).map((p,i) => {
-    // replace postgresql
+  static prepareSqlAndParams(
+    sql: string,
+    values: any,
+    queryParams: IAwsDataApiQueryParams,
+  ): { sql: string; parameters?: SqlParametersList; includeResultMetadata: boolean } {
+    if (/\$(\d+)/.test(sql)) {
+      // we have positional parameters like $1, convert them to named ones
 
-    return (sql.match(/:{1,2}[\w\d]+/g) || [])
+      const namedParams = {};
+
+      sql = sql.replace(/\$(\d+)/gi, (_, p1) => {
+        namedParams['posparam' + p1] = values[parseInt(p1, 10) - 1];
+
+        // ToDo: move this elsewhere and only check strings
+        const dateCheck = Date.parse(namedParams['posparam' + p1]);
+        if (dateCheck !== NaN && dateCheck > 0) {
+          namedParams['posparam' + p1] = new Date(dateCheck);
+        }
+
+        return ':posparam' + p1;
+      });
+
+      values = [namedParams];
+    }
+
+    if (values === undefined) {
+      values = [];
+    }
+
+    if (Utils.isObject(values) && !Array.isArray(values)) {
+      values = [values];
+    }
+
+    if (!Array.isArray(values)) {
+      AwsDataApi.error('Values must be an object or array');
+    }
+
+    // Parse and normalize parameters
+    const parameters = AwsDataApi.normalizeParams(values);
+
+    const parameterLabelAndTypes = (sql.match(/:{1,2}[\w\d]+/g) || [])
       .map((p) => {
         // TODO: future support for placeholder parsing?
         // return p === '??' ? { type: 'id' } // identifier
@@ -94,6 +128,23 @@ export class AwsDataApi {
           },
         });
       }, {});
+
+    // Process parameters and escape necessary SQL
+    const { processedParams, escapedSql } = AwsDataApi.processParams(sql, parameterLabelAndTypes, parameters, queryParams.formatOptions);
+
+    const returnVal: { sql: string; parameters?: SqlParametersList; includeResultMetadata: boolean } = {
+      sql: escapedSql,
+      includeResultMetadata: true,
+    };
+    if (processedParams && processedParams.length > 0) {
+      returnVal.parameters = processedParams;
+    }
+
+    if (!queryParams.hydrateColumnNames) {
+      returnVal.includeResultMetadata = false;
+    }
+
+    return returnVal;
   }
 
   // Gets the value type and returns the correct value field name
@@ -225,7 +276,7 @@ export class AwsDataApi {
   // Converts the string value to a Date object.
   // If standard TIMESTAMP format (YYYY-MM-DD[ HH:MM:SS[.FFF]]) without TZ + treatAsLocalDate=false then assume UTC Date
   // In all other cases convert value to datetime as-is (also values with TZ info)
-  static formatFromTimeStamp(value, treatAsLocalDate) {
+  static formatFromTimeStamp(value: string, treatAsLocalDate: boolean): Date {
     return !treatAsLocalDate && /^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2}(\.\d{3})?)?$/.test(value) ? new Date(value + 'Z') : new Date(value);
   }
 
@@ -318,56 +369,21 @@ export class AwsDataApi {
     );
   }
 
-  private async _internalQuery(sql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
-    if (/\$(\d+)/.test(sql)) {
-      // we have positional parameters, replace them
-
-      const namedParams = {};
-
-      sql = sql.replace(/\$(\d+)/gi, (_, p1) => {
-        namedParams['posparam' + p1] = values[parseInt(p1, 10) - 1];
-
-        const dateCheck = Date.parse(namedParams['posparam' + p1]);
-        if (dateCheck !== NaN && dateCheck > 0) {
-          namedParams['posparam' + p1] = new Date(dateCheck);
-        }
-
-        return ':posparam' + p1;
-      });
-
-      values = [namedParams];
-
-      console.log('ARSCH', sql, values);
-    }
-
-    const sqlParams = AwsDataApi.parseSqlParams(sql);
-
+  private async _internalQuery(inputsql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
       Utils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'database', 'convertSnakeToCamel']),
       queryParams || {},
     );
 
-    if (values === undefined) {
-      values = [];
-    }
-
-    if (Utils.isObject(values) && !Array.isArray(values)) {
-      values = [values];
-    }
-
-    if (!Array.isArray(values)) {
-      AwsDataApi.error('Values must be an object or array');
-    }
-
     // Transactional overwrites
     switch (true) {
-      case sql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
+      case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
         const beginRes = await this.beginTransaction();
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
-      case sql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
+      case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
         const commitRes = {
           transactionId: this._config.transactionId,
           transactionStatus: (await this.commitTransaction({ transactionId: this._config.transactionId })).transactionStatus,
@@ -375,7 +391,7 @@ export class AwsDataApi {
         this._config.transactionId = null;
         return commitRes;
 
-      case sql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
+      case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const rollbackRes = {
           transactionId: this._config.transactionId,
           transactionStatus: (await this.rollbackTransaction({ transactionId: this._config.transactionId })).transactionStatus,
@@ -384,35 +400,20 @@ export class AwsDataApi {
         return rollbackRes;
     }
 
-    // Parse and normalize parameters
-    const parameters = AwsDataApi.normalizeParams(values);
+    const preparedSQL = AwsDataApi.prepareSqlAndParams(inputsql, values, cleanedParams);
 
-    // Process parameters and escape necessary SQL
-    const { processedParams, escapedSql } = AwsDataApi.processParams(sql, sqlParams, parameters, cleanedParams.formatOptions);
-
-    console.log('normalized params from ', values, ' to ', parameters, ' and for AWS ', processedParams);
+    // ToDo continueAfterTimeout if its a DDL statement
 
     // Create/format the parameters
-    const params = Object.assign(
-      Utils.pick(cleanedParams, ['schema', 'database']),
-      {
-        sql: escapedSql, // add escaped sql statement
-      },
-      // Only include parameters if they exist
-      processedParams.length > 0
-        ? // Batch statements require parameterSets instead of parameters
-          { parameters: processedParams }
-        : {},
-
-      cleanedParams.hydrateColumnNames ? { includeResultMetadata: true } : {},
-      // If a transactionId is passed, overwrite any manual input
-      this._config.transactionId ? { transactionId: this._config.transactionId } : {},
-    );
+    const params = {
+      ...Utils.pick(cleanedParams, ['schema', 'database']),
+      ...preparedSQL,
+      ...(this._config.transactionId ? { transactionId: this._config.transactionId } : {}),
+    };
 
     try {
-      console.log('query params', JSON.stringify(params, null, 3));
       const result = await this.executeStatement(params);
-      // console.log('query params', JSON.stringify(params, null, 3), ' --> ', JSON.stringify(result, null, 3));
+      console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(
         { columnMetadata: result.columnMetadata, transactionId: this._config.transactionId },
         result.numberOfRecordsUpdated !== undefined && !result.records ? { numberOfRecordsUpdated: result.numberOfRecordsUpdated } : {},

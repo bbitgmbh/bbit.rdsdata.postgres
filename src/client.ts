@@ -22,7 +22,7 @@ export class Client extends EventEmitter {
     }
 
     if (isString(config)) {
-      // awsrds://{database}:{mysecret}@{region}.{account}.aws/{clustername}
+      // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}
       const url = new URL(config);
       if (url.protocol !== 'awsrds:') {
         throw new Error('unknown protocol ' + url.protocol);

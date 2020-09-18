@@ -1,0 +1,6 @@
+/src
+/coverage
+/temp
+
+junit.xml
+yarn-error.log

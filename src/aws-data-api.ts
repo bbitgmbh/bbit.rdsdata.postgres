@@ -85,10 +85,12 @@ export class AwsDataApi {
       sql = sql.replace(/\$(\d+)/gi, (_, p1) => {
         namedParams['posparam' + p1] = values[parseInt(p1, 10) - 1];
 
-        // ToDo: move this elsewhere and only check strings
-        const dateCheck = Date.parse(namedParams['posparam' + p1]);
-        if (dateCheck !== NaN && dateCheck > 0) {
-          namedParams['posparam' + p1] = new Date(dateCheck);
+        // ToDo: find out if this check needs to be also done for named parametes, not only positional ones
+        if (Utils.isString(namedParams['posparam' + p1]) && /^\d{4}/.test(namedParams['posparam' + p1])) {
+          const dateCheck = Date.parse(namedParams['posparam' + p1]);
+          if (dateCheck !== NaN && dateCheck > 0) {
+            namedParams['posparam' + p1] = new Date(dateCheck);
+          }
         }
 
         return ':posparam' + p1;
@@ -309,6 +311,11 @@ export class AwsDataApi {
 
     if (params.database !== undefined && !Utils.isString(params.database)) {
       AwsDataApi.error("'database' string value required");
+    }
+
+    // temporary warning since AWS seems to have trouble with those
+    if (/[:@]/gi.test(params.database)) {
+      console.warn('database name may not contain url special chars');
     }
 
     if (typeof params.hydrateColumnNames !== 'boolean') {

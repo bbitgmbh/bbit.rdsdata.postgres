@@ -53,6 +53,16 @@ import pg = require('@bbitgmbh/bbit.rdsdata.postgres');
 
 const connectionParams = (new pg.Client(`awsrds://${encodeURIComponent(databaseName)}:${encodeURIComponent(awsSecretName)}@${awsRegion}.${awsAccount}.aws/${encodeURIComponent(awsRdsClustername)}`)).dataApiRetrievePostgresDataApiClientConfig();
 
+/*
+connectionParams = {
+  user: 'aws:eu-central-1',
+  password: 'arn:aws:secretsmanager:eu-central-1:xxxxx:secret:rds-db-credentials/cluster-xxxxxx/postgres-xxxxx',
+  host: 'arn:aws:rds:eu-central-1:xxxxxx:cluster:xxxxxx',
+  port: 443,
+  database: 'xxxxxx'
+}
+*/
+
 const sequelize = new Sequelize({
       ...(connectionParams as any),
       dialect: 'postgres',

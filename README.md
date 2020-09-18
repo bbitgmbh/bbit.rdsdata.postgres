@@ -31,7 +31,7 @@ npm i @bbitgmbh/bbit.rdsdata.postgres aws-sdk --save
 import { Client } from '@bbitgmbh/bbit.rdsdata.postgres';
 
 // we introduced a special connection string url for this wrapper to be compatible with existing libraries:
-const client = new Client(`awsrds://${databaseName}:${awsSecretName}@${awsRegion}.${awsAccount}.aws/${awsRdsClustername}`);
+const client = new Client(`awsrds://${encodeURIComponent(databaseName)}:${encodeURIComponent(awsSecretName)}@${awsRegion}.${awsAccount}.aws/${encodeURIComponent(awsRdsClustername)}`);
 
 await client.connect();
 const res = await client.query('select table_name from information_schema.tables where table_name = :name ', { name: 'pg_tables' });
@@ -49,7 +49,7 @@ await client.end();
 ### with Sequlize ORM
 
 ```
-import * as pg from '@bbitgmbh/bbit.rdsdata.postgres';
+import pg = require('@bbitgmbh/bbit.rdsdata.postgres');
 
 const connectionParams = (new pg.Client(`awsrds://${databaseName}:${awsSecretName}@${awsRegion}.${awsAccount}.aws/${awsRdsClustername}`)).dataApiRetrievePostgresDataApiClientConfig();
 

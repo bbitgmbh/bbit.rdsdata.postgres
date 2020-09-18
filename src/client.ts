@@ -28,11 +28,11 @@ export class Client extends EventEmitter {
         throw new Error('unknown protocol ' + url.protocol);
       }
       const [region, account] = url.hostname.split('.');
-      const clusterName = url.pathname.replace(/^\//, '');
+      const clusterName = decodeURIComponent(url.pathname.replace(/^\//, ''));
       const secret = decodeURIComponent(url.password);
 
       this._region = region;
-      this._databaseName = url.username;
+      this._databaseName = decodeURIComponent(url.username);
       this._secretArn = `arn:aws:secretsmanager:${region}:${account}:secret:${secret}`;
       this._resourceArn = `arn:aws:rds:${region}:${account}:cluster:${clusterName}`;
     } else {

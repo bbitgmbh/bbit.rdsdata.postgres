@@ -88,7 +88,7 @@ export class AwsDataApi {
         // ToDo: find out if this check needs to be also done for named parametes, not only positional ones
         if (Utils.isString(namedParams['posparam' + p1]) && /^\d{4}[-_]\d{2}[-_]\d{2}/.test(namedParams['posparam' + p1])) {
           const dateCheck = Date.parse(namedParams['posparam' + p1]);
-          if (dateCheck !== NaN && dateCheck > 0) {
+          if (dateCheck !== NaN) {
             namedParams['posparam' + p1] = new Date(dateCheck);
           }
         }

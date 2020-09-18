@@ -12,6 +12,10 @@
     "rds",
     "aurora"
   ],
+  "repository": "git@github.com:bbitgmbh/bbit.rdsdata.postgres.git",
+  "bugs": {
+    "url": "https://github.com/bbitgmbh/bbit.rdsdata.postgres/issues"
+  },
   "scripts": {
     "clean": "rimraf coverage dist junit.xml",
     "test": "jest",

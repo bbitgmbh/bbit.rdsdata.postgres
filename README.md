@@ -51,7 +51,7 @@ await client.end();
 ```
 import pg = require('@bbitgmbh/bbit.rdsdata.postgres');
 
-const connectionParams = (new pg.Client(`awsrds://${databaseName}:${awsSecretName}@${awsRegion}.${awsAccount}.aws/${awsRdsClustername}`)).dataApiRetrievePostgresDataApiClientConfig();
+const connectionParams = (new pg.Client(`awsrds://${encodeURIComponent(databaseName)}:${encodeURIComponent(awsSecretName)}@${awsRegion}.${awsAccount}.aws/${encodeURIComponent(awsRdsClustername)}`)).dataApiRetrievePostgresDataApiClientConfig();
 
 const sequelize = new Sequelize({
       ...(connectionParams as any),
@@ -116,6 +116,10 @@ This project tries to solve those challenges by providing the missing piece of s
 [![codecov](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres/branch/master/graph/badge.svg)](https://codecov.io/gh/bbitgmbh/bbit.rdsdata.postgres)
 
 We are in the process to find and fix them. If you find an issue, please provide detailed info. Pull requests are very welcome.
+
+### Database name may not contain URL sensitive chars like double point
+While postgres is supporting chars like double point, it looks like AWS RDS Data API does not properly escape those. Same issue exists when trying to connect by AWS Console.
+
 
 ## Performance
 * Reuse HTTP-Connections with keep-alive

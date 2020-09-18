@@ -329,8 +329,8 @@ export class AwsDataApi {
   }
 
   query(sql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
-    return this._internalQuery(sql, values, queryParams);
-    /* return new Promise((resolve, reject) => {
+    // return this._internalQuery(sql, values, queryParams);
+    return new Promise((resolve, reject) => {
       this._serializingQueue.push({
         sql,
         values,
@@ -340,13 +340,13 @@ export class AwsDataApi {
         reject,
       });
 
-      if (this._serializingQueue.length === 1) {
+      if (this._serializingQueue.length <= (this._config.maxConcurrentQueries || 1)) {
         this._dequeSQL();
       }
-    }); */
+    });
   }
 
-  private async _dequeSQL() {
+  private _dequeSQL() {
     if (this._serializingQueue.length === 0) return;
 
     const input = this._serializingQueue[0];
@@ -359,12 +359,15 @@ export class AwsDataApi {
 
         input.resolve(result);
         this._dequeSQL();
+        return Promise.resolve();
       },
       (error: Error) => {
         input.running = false;
         this._serializingQueue.shift();
 
         input.reject(error);
+        this._dequeSQL();
+        return Promise.resolve();
       },
     );
   }
@@ -376,6 +379,7 @@ export class AwsDataApi {
       queryParams || {},
     );
 
+    let isDDLStatement = false;
     // Transactional overwrites
     switch (true) {
       case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
@@ -398,22 +402,27 @@ export class AwsDataApi {
         };
         this._config.transactionId = null;
         return rollbackRes;
+
+      case inputsql.trim().substr(0, 'CREATE'.length).toUpperCase() === 'CREATE':
+      case inputsql.trim().substr(0, 'DROP'.length).toUpperCase() === 'DROP':
+      case inputsql.trim().substr(0, 'ALTER'.length).toUpperCase() === 'ALTER':
+        isDDLStatement = true;
+        break;
     }
 
     const preparedSQL = AwsDataApi.prepareSqlAndParams(inputsql, values, cleanedParams);
 
-    // ToDo continueAfterTimeout if its a DDL statement
-
     // Create/format the parameters
     const params = {
       ...Utils.pick(cleanedParams, ['schema', 'database']),
+      ...{ continueAfterTimeout: isDDLStatement },
       ...preparedSQL,
       ...(this._config.transactionId ? { transactionId: this._config.transactionId } : {}),
     };
 
     try {
       const result = await this.executeStatement(params);
-      console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
+      // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(
         { columnMetadata: result.columnMetadata, transactionId: this._config.transactionId },
         result.numberOfRecordsUpdated !== undefined && !result.records ? { numberOfRecordsUpdated: result.numberOfRecordsUpdated } : {},

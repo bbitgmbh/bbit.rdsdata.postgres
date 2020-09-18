@@ -13,6 +13,7 @@ export interface IAwsDataApiQueryParams {
   database?: string;
   schema?: string;
   hydrateColumnNames?: boolean;
+  maxConcurrentQueries?: number;
   formatOptions?: {
     deserializeDate?: boolean;
     treatAsLocalDate?: boolean;

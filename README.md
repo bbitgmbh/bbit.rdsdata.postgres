@@ -10,6 +10,7 @@ The goal of this project is to provide a node-postgres compatible client that co
   * Support for named parameters with double point sign
   * Support for positional parameters with dollar sign
   * Support for transactions
+  * Support for postgres array datatype
 * TypeScript support
 * General RDS Data API Client with
   * automatic SQL and parameters preparation to AWS format
@@ -129,6 +130,9 @@ We are in the process to find and fix them. If you find an issue, please provide
 
 ### Database name may not contain URL sensitive chars like double point
 While postgres is supporting chars like double point, it looks like AWS RDS Data API does not properly escape those. Same issue exists when trying to connect by AWS Console.
+
+### Asynchronous notification will not work
+Due to the request/response nature of the http protocol asynchronous database notifications can not be transmitted back to the client.
 
 
 ## Performance

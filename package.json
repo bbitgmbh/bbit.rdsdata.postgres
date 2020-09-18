@@ -27,6 +27,7 @@
     "bbitprecommit": "run-p lint test build"
   },
   "dependencies": {
+    "pg-types": "^3.0.1",
     "sqlstring": "^2.3.2"
   },
   "peerDependencies": {

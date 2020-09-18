@@ -202,7 +202,7 @@ export class AwsDataApi {
 
   // Formats the (UTC) date to the AWS accepted YYYY-MM-DD HH:MM:SS[.FFF] format
   // See https://docs.aws.amazon.com/rdsdataservice/latest/APIReference/API_SqlParameter.html
-  static formatToTimeStamp(date, treatAsLocalDate) {
+  static formatToTimeStamp(date: Date, treatAsLocalDate: boolean) {
     const pad = (val, num = 2) => '0'.repeat(num - (val + '').length) + val;
 
     const year = treatAsLocalDate ? date.getFullYear() : date.getUTCFullYear();

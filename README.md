@@ -111,10 +111,10 @@ await sequelize.close();
 When we started to go serverless with API Gateway and AWS Lambda, we soon recognized that RDS Database connection handling is hard. There are many great blog posts on the internet about, to summarize those:
 
 1. In an AWS Lambda, you shouldn't use connection pools and you should open/close the database connection on every event to prevent timeout issues and to prevent crashing the database server with too many concurrent connections.
-2. To be able to connect/disconnect fast, you wanna use AWS RDS Proxy. RDS Proxy also helps prevent issues with maximal open concurrent connections to the database, so that lambda can scale without having to worry about that. But this also has a price tag
-3. To be able to connect/disconnect, your AWS Lambda needs to be in a proper configured VPC. When your Lambda needs Internet-Access or needs to access an AWS resource where you didn't set up a VPC Endpoint, you need at least one NAT-Gateway, which also has a price tag.
+2. To be able to connect fast, you wanna use AWS RDS Proxy. RDS Proxy also helps prevent issues with maximal open concurrent connections to the database, so that lambda can scale without having to worry about that. But this also has a price tag
+3. To be able to connect at all, your AWS Lambda needs to be in a proper configured VPC. When your Lambda needs Internet-Access or needs to access an AWS resource where you didn't set up a VPC Endpoint, you need at least one NAT-Gateway, which also has a price tag.
 
-If you wanna go around all those challenges, there is the AWS RDS Data API, which lets you execute SQL statements over HTTP with their usual AWS IAM authentication. But this introduces other challenges:
+If you wanna go around all those challenges, there is the AWS RDS Data API, which lets you execute SQL statements over HTTP with the usual AWS IAM authentication. But this introduces other challenges:
 
 1. the request/response format does not match with the ones from node-postgres. When you use an ORM like sequelize, this is not usable.
 2. transactions do have a dedicated API, where you start a transaction, get a transaction id, run queries with this transaction id, and then either commit or rollback

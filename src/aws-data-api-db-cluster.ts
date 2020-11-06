@@ -1,7 +1,8 @@
-import { SecretsManager, RDSDataService } from 'aws-sdk';
+import { SecretsManager, RDSDataService, RDS } from 'aws-sdk';
 import { ClientConfig } from 'pg';
-import { Utils } from './utils';
+import { AwsDataApiUtils, UnixEpochTimestamp } from './utils';
 import { DbName, Id, ResultSetOptions, SqlParameterSets, SqlParametersList, SqlStatement } from 'aws-sdk/clients/rdsdataservice';
+import { DBCluster } from 'aws-sdk/clients/rds';
 
 export class AwsDataApiDbCluster {
   public readonly secretArn: string;
@@ -11,11 +12,15 @@ export class AwsDataApiDbCluster {
   public readonly region: string;
   public readonly schema: string;
 
+  private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
   private _rds: RDSDataService;
+  private _clusterInfo: DBCluster;
+
+  public static MIN_AURORA_CLUSTER_UPTIME_SECONDS = 5 * 60;
 
   constructor(
     config?: string | ClientConfig,
-    additionalConfig?: { defaultSchema?: string; rdsOptions?: AWS.RDSDataService.ClientConfiguration; client?: any },
+    additionalConfig?: { defaultSchema?: string; rdsOptions?: AWS.RDSDataService.ClientConfiguration; client?: RDSDataService },
   ) {
     if (!config) {
       return;
@@ -23,7 +28,7 @@ export class AwsDataApiDbCluster {
 
     this.schema = additionalConfig?.defaultSchema;
 
-    if (Utils.isString(config)) {
+    if (AwsDataApiUtils.isString(config)) {
       // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}
       const url = new URL(config);
       if (url.protocol !== 'awsrds:') {
@@ -50,15 +55,15 @@ export class AwsDataApiDbCluster {
       this.resourceArn = config.host;
     }
 
-    if (!Utils.isString(this.secretArn)) {
+    if (!AwsDataApiUtils.isString(this.secretArn)) {
       throw new Error("'secretArn' string value required");
     }
 
-    if (!Utils.isString(this.resourceArn)) {
+    if (!AwsDataApiUtils.isString(this.resourceArn)) {
       throw new Error("'resourceArn' string value required");
     }
 
-    if (this.databaseName !== undefined && !Utils.isString(this.databaseName)) {
+    if (this.databaseName !== undefined && !AwsDataApiUtils.isString(this.databaseName)) {
       throw new Error("'database' string value required");
     }
 
@@ -68,10 +73,44 @@ export class AwsDataApiDbCluster {
     }
 
     if (additionalConfig?.client) {
-      this._rds = new additionalConfig.client(Utils.mergeConfig({ region: this.region }, additionalConfig?.rdsOptions || {}));
+      this._rds = additionalConfig.client;
     } else {
-      this._rds = new RDSDataService(Utils.mergeConfig({ region: this.region }, additionalConfig?.rdsOptions || {}));
+      this._rds = new RDSDataService(AwsDataApiUtils.mergeConfig({ region: this.region }, additionalConfig?.rdsOptions || {}));
     }
+  }
+
+  async checkDbState(params?: { triggerDatabaseStartup: boolean; startupTimeoutInMS?: number }): Promise<boolean> {
+    if (
+      !this._dbState.lastCheck ||
+      Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataApiDbCluster.MIN_AURORA_CLUSTER_UPTIME_SECONDS
+    ) {
+      const rds = new RDS({ region: this.region });
+      const clusterRes = await rds
+        .describeDBClusters({
+          DBClusterIdentifier: this.clusterIdentifier,
+        })
+        .promise();
+      this._clusterInfo = clusterRes.DBClusters[0];
+
+      this._dbState.isRunning = this._clusterInfo.Status === 'available';
+      this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+    }
+
+    if (params?.triggerDatabaseStartup && !this._dbState.isRunning) {
+      this.executeStatement(
+        {
+          continueAfterTimeout: false,
+          sql: 'SELECT NOW() as currenttime',
+        },
+        { timeoutInMS: params.startupTimeoutInMS || 100, skipDbStateCheck: true },
+      );
+    }
+
+    return this._dbState.isRunning;
+  }
+
+  getClusterInfo(): DBCluster {
+    return this._clusterInfo;
   }
 
   postgresDataApiClientConfig(): ClientConfig {
@@ -137,7 +176,9 @@ export class AwsDataApiDbCluster {
     transactionId?: Id;
   }) {
     return this._rds
-      .batchExecuteStatement(Utils.mergeConfig(Utils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args))
+      .batchExecuteStatement(
+        AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
+      )
       .promise();
   }
 
@@ -148,43 +189,87 @@ export class AwsDataApiDbCluster {
     schema?: DbName;
   }) {
     return this._rds
-      .beginTransaction(Utils.mergeConfig(Utils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args || {}))
+      .beginTransaction(
+        AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args || {}),
+      )
       .promise();
   }
 
-  executeStatement(args: {
-    /**
-     * A value that indicates whether to continue running the statement after the call times out. By default, the statement stops running when the call times out.  For DDL statements, we recommend continuing to run the statement after the call times out. When a DDL statement terminates before it is finished running, it can result in errors and possibly corrupted data structures.
-     */
-    continueAfterTimeout?: boolean;
-    /**
-     * A value that indicates whether to include metadata in the results.
-     */
-    includeResultMetadata?: boolean;
-    /**
-     * The parameters for the SQL statement.  Array parameters are not supported.
-     */
-    parameters?: SqlParametersList;
-    /**
-     * Options that control how the result set is returned.
-     */
-    resultSetOptions?: ResultSetOptions;
-    /**
-     * The name of the database schema.
-     */
-    schema?: DbName;
-    /**
-     * The SQL statement to run.
-     */
-    sql: SqlStatement;
-    /**
-     * The identifier of a transaction that was started by using the BeginTransaction operation. Specify the transaction ID of the transaction that you want to include the SQL statement in. If the SQL statement is not part of a transaction, don't set this parameter.
-     */
-    transactionId?: Id;
-  }) {
-    return this._rds
-      .executeStatement(Utils.mergeConfig(Utils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args))
-      .promise();
+  async executeStatement(
+    args: {
+      /**
+       * A value that indicates whether to continue running the statement after the call times out. By default, the statement stops running when the call times out.  For DDL statements, we recommend continuing to run the statement after the call times out. When a DDL statement terminates before it is finished running, it can result in errors and possibly corrupted data structures.
+       */
+      continueAfterTimeout?: boolean;
+      /**
+       * A value that indicates whether to include metadata in the results.
+       */
+      includeResultMetadata?: boolean;
+      /**
+       * The parameters for the SQL statement.  Array parameters are not supported.
+       */
+      parameters?: SqlParametersList;
+      /**
+       * Options that control how the result set is returned.
+       */
+      resultSetOptions?: ResultSetOptions;
+      /**
+       * The name of the database schema.
+       */
+      schema?: DbName;
+      /**
+       * The SQL statement to run.
+       */
+      sql: SqlStatement;
+      /**
+       * The identifier of a transaction that was started by using the BeginTransaction operation. Specify the transaction ID of the transaction that you want to include the SQL statement in. If the SQL statement is not part of a transaction, don't set this parameter.
+       */
+      transactionId?: Id;
+    },
+    additionalParams?: {
+      timeoutInMS?: number;
+      skipDbStateCheck?: boolean;
+    },
+  ): Promise<RDSDataService.ExecuteStatementResponse> {
+    if (!additionalParams?.skipDbStateCheck) {
+      await this.checkDbState({ triggerDatabaseStartup: true });
+    }
+
+    return new Promise((resolve, reject) => {
+      const sqlReq = this._rds.executeStatement(
+        AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
+      );
+
+      let isAborted = false;
+      let timeoutRef =
+        additionalParams?.timeoutInMS > 0
+          ? setTimeout(() => {
+              isAborted = true;
+              timeoutRef = null;
+              sqlReq.abort();
+              reject(new Error(this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting'));
+            })
+          : null;
+
+      sqlReq.send((err, data) => {
+        if (timeoutRef) {
+          clearTimeout(timeoutRef);
+        }
+
+        if (isAborted) {
+          return;
+        }
+
+        if (err) {
+          return reject(err);
+        }
+
+        this._dbState.isRunning = true;
+        this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+
+        return resolve(data);
+      });
+    });
   }
 
   commitTransaction(args: {
@@ -193,7 +278,9 @@ export class AwsDataApiDbCluster {
      */
     transactionId: Id;
   }) {
-    return this._rds.commitTransaction(Utils.mergeConfig(Utils.pick(this, ['resourceArn', 'secretArn']), args)).promise();
+    return this._rds
+      .commitTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn']), args))
+      .promise();
   }
 
   rollbackTransaction(args: {
@@ -202,6 +289,8 @@ export class AwsDataApiDbCluster {
      */
     transactionId: Id;
   }) {
-    return this._rds.rollbackTransaction(Utils.mergeConfig(Utils.pick(this, ['resourceArn', 'secretArn']), args)).promise();
+    return this._rds
+      .rollbackTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn']), args))
+      .promise();
   }
 }

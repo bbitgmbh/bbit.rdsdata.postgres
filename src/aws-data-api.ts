@@ -2,7 +2,7 @@ import * as AWS from 'aws-sdk';
 import { SqlParametersList, SqlRecords } from 'aws-sdk/clients/rdsdataservice';
 import * as sqlString from 'sqlstring';
 import { IAwsDataApiConfig, IAwsDataApiQueryParams, IAwsDataApiQueryResult } from './interfaces';
-import { Utils } from './utils';
+import { AwsDataApiUtils } from './utils';
 
 // Supported value types in the Data API
 const supportedTypes = ['arrayValue', 'blobValue', 'booleanValue', 'doubleValue', 'isNull', 'longValue', 'stringValue', 'structValue'];
@@ -79,7 +79,7 @@ export class AwsDataApi {
 
         // ToDo: find out if this check needs to be also done for named parametes, not only positional ones
         if (
-          Utils.isString(namedParams['posparam' + p1]) &&
+          AwsDataApiUtils.isString(namedParams['posparam' + p1]) &&
           /^\d{4}[-_]\d{2}[-_]\d{0,2}\s\d{2}:\d{0,2}:\d{0,2}/.test(namedParams['posparam' + p1])
         ) {
           const dateCheck = Date.parse(namedParams['posparam' + p1]);
@@ -98,7 +98,7 @@ export class AwsDataApi {
       values = [];
     }
 
-    if (Utils.isObject(values) && !Array.isArray(values)) {
+    if (AwsDataApiUtils.isObject(values) && !Array.isArray(values)) {
       values = [values];
     }
 
@@ -157,7 +157,7 @@ export class AwsDataApi {
       ? 'doubleValue'
       : val === null
       ? 'isNull'
-      : Utils.isDate(val)
+      : AwsDataApiUtils.isDate(val)
       ? 'stringValue'
       : Buffer.isBuffer(val)
       ? 'blobValue'
@@ -170,7 +170,7 @@ export class AwsDataApi {
 
   // Hint to specify the underlying object type for data type mapping
   static getTypeHint(val) {
-    return Utils.isDate(val) ? 'TIMESTAMP' : undefined;
+    return AwsDataApiUtils.isDate(val) ? 'TIMESTAMP' : undefined;
   }
 
   // Creates a standard Data API parameter using the supplied inputs
@@ -184,7 +184,7 @@ export class AwsDataApi {
               [type ? type : AwsDataApi.error(`'${name}' is an invalid type`)]:
                 type === 'isNull'
                   ? true
-                  : Utils.isDate(value)
+                  : AwsDataApiUtils.isDate(value)
                   ? AwsDataApi.formatToTimeStamp(value, formatOptions && formatOptions.treatAsLocalDate)
                   : value,
             },
@@ -213,7 +213,7 @@ export class AwsDataApi {
 
   static formatRecords(recs: SqlRecords, columns: AWS.RDSDataService.Metadata, params: IAwsDataApiQueryParams) {
     if (params.convertSnakeToCamel) {
-      columns.filter((c) => c.label.includes('_')).forEach((c) => (c.label = Utils.snakeToCamel(c.label)));
+      columns.filter((c) => c.label.includes('_')).forEach((c) => (c.label = AwsDataApiUtils.snakeToCamel(c.label)));
     }
 
     const fieldMap: { label: string; typeName: string; fieldKey: string }[] =
@@ -303,11 +303,11 @@ export class AwsDataApi {
       params.hydrateColumnNames = true;
     }
 
-    if (!Utils.isObject(params.formatOptions)) {
+    if (!AwsDataApiUtils.isObject(params.formatOptions)) {
       params.formatOptions = {} as any;
     }
 
-    this._config = Utils.mergeConfig({ hydrateColumnNames: true }, params);
+    this._config = AwsDataApiUtils.mergeConfig({ hydrateColumnNames: true }, params);
   }
 
   query(sql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
@@ -358,7 +358,7 @@ export class AwsDataApi {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
       { database: this._config.cluster.databaseName, schema: this._config.cluster.schema },
-      Utils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'schema', 'convertSnakeToCamel']),
+      AwsDataApiUtils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'schema', 'convertSnakeToCamel']),
       queryParams || {},
     );
 
@@ -399,16 +399,14 @@ export class AwsDataApi {
 
     // Create/format the parameters
     const params = {
-      ...Utils.pick(cleanedParams, ['schema', 'database']),
+      ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
       ...{ continueAfterTimeout: isDDLStatement },
       ...preparedSQL,
       ...(this._config.transactionId ? { transactionId: this._config.transactionId } : {}),
     };
 
     try {
-      const result = await (queryParams?.queryTimeout
-        ? Utils.promiseWithTimeout(this._config.cluster.executeStatement(params), queryParams.queryTimeout)
-        : this._config.cluster.executeStatement(params));
+      const result = await this._config.cluster.executeStatement(params, { timeoutInMS: queryParams?.queryTimeout });
 
       // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(

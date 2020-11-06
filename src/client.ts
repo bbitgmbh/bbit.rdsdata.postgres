@@ -1,7 +1,7 @@
 import { ClientConfig, QueryArrayConfig, QueryArrayResult, QueryConfig, QueryResult, QueryResultRow, Submittable } from 'pg';
 import { EventEmitter } from 'events';
 import { AwsDataApi } from './aws-data-api';
-import { Utils } from './utils';
+import { AwsDataApiUtils } from './utils';
 import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
 
 export class Connection extends EventEmitter {}
@@ -47,14 +47,14 @@ export class Client extends EventEmitter {
     valuesOrCallback?: any,
     callback?: (err: Error, result: any) => void,
   ): Promise<QueryArrayResult<any> | QueryResultRow> {
-    if (Utils.isFunction(valuesOrCallback)) {
+    if (AwsDataApiUtils.isFunction(valuesOrCallback)) {
       callback = valuesOrCallback;
       valuesOrCallback = undefined;
     }
 
     const promise = async (): Promise<any> => {
       switch (true) {
-        case Utils.isString(query):
+        case AwsDataApiUtils.isString(query):
           // console.log('query string', query, valuesOrCallback);
           const result = await this._client.query(query, valuesOrCallback);
           // console.log('query string', query, valuesOrCallback, result.records);

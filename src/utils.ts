@@ -1,4 +1,6 @@
-export class Utils {
+export type UnixEpochTimestamp = number;
+
+export class AwsDataApiUtils {
   // Utility function for removing certain keys from an object
   static omit<T>(obj: T, values: string[]) {
     return Object.keys(obj).reduce((acc, x) => (values.includes(x) ? acc : Object.assign(acc, { [x]: obj[x] })), {} as T);
@@ -38,6 +40,7 @@ export class Utils {
     return value.replace(/([-_][a-z])/g, (group) => group.toUpperCase().replace('-', '').replace('_', ''));
   }
 
+  /*
   static async promiseWithTimeout<T>(promise: Promise<T>, timeoutInMS: number, errorCode = 'database-is-starting'): Promise<T> {
     let timeoutId: any;
     let outerResolve: any;
@@ -51,5 +54,9 @@ export class Utils {
     clearTimeout(timeoutId);
     outerResolve();
     return v;
+  } */
+
+  public static getUnixEpochTimestamp(): UnixEpochTimestamp {
+    return (Date.now ? Date.now() : new Date().getTime()) / 1000;
   }
 }

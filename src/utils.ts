@@ -37,4 +37,19 @@ export class Utils {
   static snakeToCamel(value: string) {
     return value.replace(/([-_][a-z])/g, (group) => group.toUpperCase().replace('-', '').replace('_', ''));
   }
+
+  static async promiseWithTimeout<T>(promise: Promise<T>, timeoutInMS: number, errorCode = 'database-is-starting'): Promise<T> {
+    let timeoutId: any;
+    let outerResolve: any;
+    const timeoutPromise: Promise<any> = new Promise<T>((resolve, reject) => {
+      outerResolve = resolve;
+      timeoutId = setTimeout(() => {
+        reject(new Error(errorCode));
+      }, timeoutInMS);
+    });
+    const v = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId);
+    outerResolve();
+    return v;
+  }
 }

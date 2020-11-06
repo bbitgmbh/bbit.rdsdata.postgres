@@ -1,13 +1,5 @@
 import * as AWS from 'aws-sdk';
-import {
-  DbName,
-  Id,
-  ResultSetOptions,
-  SqlParameterSets,
-  SqlParametersList,
-  SqlRecords,
-  SqlStatement,
-} from 'aws-sdk/clients/rdsdataservice';
+import { SqlParametersList, SqlRecords } from 'aws-sdk/clients/rdsdataservice';
 import * as sqlString from 'sqlstring';
 import { IAwsDataApiConfig, IAwsDataApiQueryParams, IAwsDataApiQueryResult } from './interfaces';
 import { Utils } from './utils';
@@ -293,7 +285,6 @@ export class AwsDataApi {
   }
 
   private _config: IAwsDataApiConfig;
-  private _rds: AWS.RDSDataService;
   private _serializingQueue: {
     sql: string;
     values?: any;
@@ -304,21 +295,8 @@ export class AwsDataApi {
   }[] = [];
 
   constructor(params: IAwsDataApiConfig) {
-    if (!Utils.isString(params.secretArn)) {
-      AwsDataApi.error("'secretArn' string value required");
-    }
-
-    if (!Utils.isString(params.resourceArn)) {
-      AwsDataApi.error("'resourceArn' string value required");
-    }
-
-    if (params.database !== undefined && !Utils.isString(params.database)) {
-      AwsDataApi.error("'database' string value required");
-    }
-
-    // temporary warning since AWS seems to have trouble with those
-    if (/[:@]/gi.test(params.database)) {
-      console.warn('database name may not contain url special chars');
+    if (!params.cluster) {
+      AwsDataApi.error("'cluster' value required");
     }
 
     if (typeof params.hydrateColumnNames !== 'boolean') {
@@ -330,12 +308,6 @@ export class AwsDataApi {
     }
 
     this._config = Utils.mergeConfig({ hydrateColumnNames: true }, params);
-
-    if (params.options !== undefined && !Utils.isObject(params.options)) {
-      throw new Error('param-options-must-be-an-object');
-    }
-
-    this._rds = new AWS.RDSDataService(params.options);
   }
 
   query(sql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
@@ -385,7 +357,8 @@ export class AwsDataApi {
   private async _internalQuery(inputsql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
-      Utils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'database', 'convertSnakeToCamel']),
+      { database: this._config.cluster.databaseName, schema: this._config.cluster.schema },
+      Utils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'schema', 'convertSnakeToCamel']),
       queryParams || {},
     );
 
@@ -393,14 +366,15 @@ export class AwsDataApi {
     // Transactional overwrites
     switch (true) {
       case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
-        const beginRes = await this.beginTransaction();
+        const beginRes = await this._config.cluster.beginTransaction();
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
       case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
         const commitRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this.commitTransaction({ transactionId: this._config.transactionId })).transactionStatus,
+          transactionStatus: (await this._config.cluster.commitTransaction({ transactionId: this._config.transactionId }))
+            .transactionStatus,
         };
         this._config.transactionId = null;
         return commitRes;
@@ -408,7 +382,8 @@ export class AwsDataApi {
       case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const rollbackRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this.rollbackTransaction({ transactionId: this._config.transactionId })).transactionStatus,
+          transactionStatus: (await this._config.cluster.rollbackTransaction({ transactionId: this._config.transactionId }))
+            .transactionStatus,
         };
         this._config.transactionId = null;
         return rollbackRes;
@@ -431,7 +406,10 @@ export class AwsDataApi {
     };
 
     try {
-      const result = await this.executeStatement(params);
+      const result = await (queryParams?.queryTimeout
+        ? Utils.promiseWithTimeout(this._config.cluster.executeStatement(params), queryParams.queryTimeout)
+        : this._config.cluster.executeStatement(params));
+
       // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(
         { columnMetadata: result.columnMetadata, transactionId: this._config.transactionId },
@@ -445,7 +423,7 @@ export class AwsDataApi {
         result.generatedFields && result.generatedFields.length > 0 ? { insertId: result.generatedFields[0].longValue } : {},
       );
     } catch (e) {
-      console.error('query params', JSON.stringify(params, null, 3), e);
+      console.error('on executeStatement ', JSON.stringify(params, null, 3), e);
       throw e;
     }
   }
@@ -498,7 +476,7 @@ export class AwsDataApi {
     // return AwsDataApi.formatResults(result, hydrateColumnNames, args[0].includeResultMetadata === true ? true : false, formatOptions);
   } */
 
-  async transaction<T>(params: { schema?: string }, lambda: (client: AwsDataApi) => Promise<T>): Promise<T> {
+  async transaction<T>(lambda: (client: AwsDataApi) => Promise<T>): Promise<T> {
     const transactionalClient = new AwsDataApi({ ...this._config, transactionId: null });
 
     await transactionalClient.query('BEGIN');
@@ -513,94 +491,5 @@ export class AwsDataApi {
     }
 
     return res;
-  }
-
-  batchExecuteStatement(args: {
-    /**
-     * The parameter set for the batch operation. The SQL statement is executed as many times as the number of parameter sets provided. To execute a SQL statement with no parameters, use one of the following options:   Specify one or more empty parameter sets.   Use the ExecuteStatement operation instead of the BatchExecuteStatement operation.    Array parameters are not supported.
-     */
-    parameterSets?: SqlParameterSets;
-
-    /**
-     * The name of the database schema.
-     */
-    schema?: DbName;
-
-    /**
-     * The SQL statement to run.
-     */
-    sql: SqlStatement;
-    /**
-     * The identifier of a transaction that was started by using the BeginTransaction operation. Specify the transaction ID of the transaction that you want to include the SQL statement in. If the SQL statement is not part of a transaction, don't set this parameter.
-     */
-    transactionId?: Id;
-  }) {
-    return this._rds
-      .batchExecuteStatement(Utils.mergeConfig(Utils.pick(this._config, ['resourceArn', 'secretArn', 'database', 'schema']), args))
-      .promise();
-  }
-
-  beginTransaction(args?: {
-    /**
-     * The name of the database schema.
-     */
-    schema?: DbName;
-  }) {
-    return this._rds
-      .beginTransaction(Utils.mergeConfig(Utils.pick(this._config, ['resourceArn', 'secretArn', 'database', 'schema']), args || {}))
-      .promise();
-  }
-
-  executeStatement(args: {
-    /**
-     * A value that indicates whether to continue running the statement after the call times out. By default, the statement stops running when the call times out.  For DDL statements, we recommend continuing to run the statement after the call times out. When a DDL statement terminates before it is finished running, it can result in errors and possibly corrupted data structures.
-     */
-    continueAfterTimeout?: boolean;
-    /**
-     * A value that indicates whether to include metadata in the results.
-     */
-    includeResultMetadata?: boolean;
-    /**
-     * The parameters for the SQL statement.  Array parameters are not supported.
-     */
-    parameters?: SqlParametersList;
-    /**
-     * Options that control how the result set is returned.
-     */
-    resultSetOptions?: ResultSetOptions;
-    /**
-     * The name of the database schema.
-     */
-    schema?: DbName;
-    /**
-     * The SQL statement to run.
-     */
-    sql: SqlStatement;
-    /**
-     * The identifier of a transaction that was started by using the BeginTransaction operation. Specify the transaction ID of the transaction that you want to include the SQL statement in. If the SQL statement is not part of a transaction, don't set this parameter.
-     */
-    transactionId?: Id;
-  }) {
-    return this._rds
-      .executeStatement(Utils.mergeConfig(Utils.pick(this._config, ['resourceArn', 'secretArn', 'database', 'schema']), args))
-      .promise();
-  }
-
-  commitTransaction(args: {
-    /**
-     * The identifier of the transaction to end and commit.
-     */
-    transactionId: Id;
-  }) {
-    return this._rds.commitTransaction(Utils.mergeConfig(Utils.pick(this._config, ['resourceArn', 'secretArn']), args)).promise();
-  }
-
-  rollbackTransaction(args: {
-    /**
-     * The identifier of the transaction to roll back.
-     */
-    transactionId: Id;
-  }) {
-    return this._rds.rollbackTransaction(Utils.mergeConfig(Utils.pick(this._config, ['resourceArn', 'secretArn']), args)).promise();
   }
 }

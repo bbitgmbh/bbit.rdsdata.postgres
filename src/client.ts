@@ -1,111 +1,31 @@
 import { ClientConfig, QueryArrayConfig, QueryArrayResult, QueryConfig, QueryResult, QueryResultRow, Submittable } from 'pg';
-import { SecretsManager } from 'aws-sdk';
 import { EventEmitter } from 'events';
 import { AwsDataApi } from './aws-data-api';
 import { Utils } from './utils';
+import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
 
 export class Connection extends EventEmitter {}
 
 export class Client extends EventEmitter {
   private _client: any = null;
-  private _secretArn: string;
-  private _resourceArn: string;
-  private _databaseName: string;
-  private _region: string;
+  private _connectionConfig: AwsDataApiDbCluster;
 
   public connection: Connection = new Connection();
 
   constructor(config?: string | ClientConfig) {
     super();
-    if (!config) {
-      return;
-    }
 
-    if (Utils.isString(config)) {
-      // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}
-      const url = new URL(config);
-      if (url.protocol !== 'awsrds:') {
-        throw new Error('unknown protocol ' + url.protocol);
-      }
-      const [region, account] = url.hostname.split('.');
-      const clusterName = decodeURIComponent(url.pathname.replace(/^\//, ''));
-      const secret = decodeURIComponent(url.password);
-
-      this._region = region;
-      this._databaseName = decodeURIComponent(url.username);
-      this._secretArn = `arn:aws:secretsmanager:${region}:${account}:secret:${secret}`;
-      this._resourceArn = `arn:aws:rds:${region}:${account}:cluster:${clusterName}`;
-    } else {
-      const [, , service, region] = config.host.split(':');
-
-      if (service !== 'rds') {
-        throw new Error('host must be an AWS RDS arn');
-      }
-
-      this._region = region;
-      this._databaseName = config.database;
-      this._secretArn = config.password;
-      this._resourceArn = config.host;
-    }
+    this._connectionConfig = new AwsDataApiDbCluster(config);
   }
 
-  dataApiGetAWSConfig(): { secretArn: string; resourceArn: string; database: string; options: { region: string } } {
-    return {
-      secretArn: this._secretArn,
-      resourceArn: this._resourceArn,
-      database: this._databaseName,
-      options: {
-        region: this._region,
-      },
-    };
-  }
-
-  dataApiRetrievePostgresDataApiClientConfig(): ClientConfig {
-    return {
-      user: 'aws:' + this._region,
-      password: this._secretArn,
-      host: this._resourceArn,
-      port: 443,
-      database: this._databaseName,
-    } as any;
-  }
-
-  async dataApiRetrievePostgresNativeClientConfig(): Promise<ClientConfig> {
-    // arn:aws:secretsmanager:eu-central-1:XXXXX:secret:rds-db-credentials/cluster-XXXXX/postgres-xxxx
-    const [, , service, region, , type] = (this._secretArn || '').split(':');
-
-    if (service !== 'secretsmanager') {
-      throw new Error('secret arn must be a secretsmanager ARN');
-    }
-
-    if (type !== 'secret') {
-      throw new Error('secret arn type must be secret');
-    }
-
-    const secretsClient = new SecretsManager({ region });
-
-    const data = await secretsClient.getSecretValue({ SecretId: this._secretArn }).promise();
-
-    const secretString = 'SecretString' in data ? data.SecretString : Buffer.from(data.SecretBinary as string, 'base64').toString('ascii');
-
-    const values = JSON.parse(secretString);
-
-    return {
-      user: values.username,
-      password: values.password,
-      host: values.host,
-      port: values.port,
-      database: this._databaseName,
-      awsDbInstanceIdentifier: values.dbInstanceIdentifier,
-      awsEngine: values.engine,
-      awsResourceId: values.resourceId,
-    } as any;
+  getConnectionConfig(): AwsDataApiDbCluster {
+    return this._connectionConfig;
   }
 
   connect(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
       this._client = new AwsDataApi({
-        ...this.dataApiGetAWSConfig(),
+        cluster: this._connectionConfig,
         formatOptions: {
           stringifyArrays: true,
         },

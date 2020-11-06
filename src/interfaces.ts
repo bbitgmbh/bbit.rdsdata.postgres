@@ -1,17 +1,15 @@
 import * as AWS from 'aws-sdk';
+import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
 
 export interface IAwsDataApiConfig extends IAwsDataApiQueryParams {
-  secretArn: string;
-  resourceArn: string;
+  cluster: AwsDataApiDbCluster;
   engine?: 'postgres' | 'mysql';
   transactionId?: string;
-  options?: AWS.RDSDataService.ClientConfiguration;
-  client?: AWS.RDSDataService;
 }
 
 export interface IAwsDataApiQueryParams {
-  database?: string;
   schema?: string;
+  queryTimeout?: number;
   hydrateColumnNames?: boolean;
   maxConcurrentQueries?: number;
   formatOptions?: {

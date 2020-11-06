@@ -10,7 +10,7 @@ describe('Simulate raw postgres client', () => {
     'create table, insert and retrieve a record',
     async () => {
       const client = new lib.Client(dbUrl);
-      const options = client.dataApiRetrievePostgresDataApiClientConfig();
+      const options = client.getConnectionConfig().postgresDataApiClientConfig();
       console.log(options);
 
       const sequelize = new Sequelize({

@@ -19,6 +19,13 @@ export class AwsDataApiDbCluster {
 
   public static MIN_AURORA_CLUSTER_UPTIME_SECONDS = 5 * 60;
 
+  static getDbUrl(clusterId: string, secretArn: string, dbName: string) {
+    //  `awsrds://${encodeURIComponent(env.organizationKey + '_' + env.environmentKey)}:rds-db-credentials%2Fcluster-75GH5UAKZ4IQNT3OARJMZOSS24%2Fpostgres-jyn7oj@eu-central-1.064168052826.aws/bbit-database`
+    const [, , , region, account, , secretName] = secretArn.split(':');
+
+    return `awsrds://${dbName}:${encodeURIComponent(secretName)}@${region}.${account}.aws/${encodeURIComponent(clusterId)}`;
+  }
+
   constructor(
     config?: string | ClientConfig,
     additionalConfig?: {

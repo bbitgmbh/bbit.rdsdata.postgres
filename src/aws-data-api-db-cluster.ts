@@ -15,18 +15,25 @@ export class AwsDataApiDbCluster {
   private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
   private _rds: RDSDataService;
   private _clusterInfo: DBCluster;
+  private _defaultTimeoutInMS: number;
 
   public static MIN_AURORA_CLUSTER_UPTIME_SECONDS = 5 * 60;
 
   constructor(
     config?: string | ClientConfig,
-    additionalConfig?: { defaultSchema?: string; rdsOptions?: AWS.RDSDataService.ClientConfiguration; client?: RDSDataService },
+    additionalConfig?: {
+      defaultSchema?: string;
+      rdsOptions?: AWS.RDSDataService.ClientConfiguration;
+      client?: RDSDataService;
+      defaultTimeoutInMS: number;
+    },
   ) {
     if (!config) {
       return;
     }
 
     this.schema = additionalConfig?.defaultSchema;
+    this._defaultTimeoutInMS = additionalConfig?.defaultTimeoutInMS;
 
     if (AwsDataApiUtils.isString(config)) {
       // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}
@@ -79,21 +86,37 @@ export class AwsDataApiDbCluster {
     }
   }
 
-  async checkDbState(params?: { triggerDatabaseStartup: boolean; startupTimeoutInMS?: number }): Promise<boolean> {
+  setDefaultTimeout(timeoutInMS: number): void {
+    this._defaultTimeoutInMS = timeoutInMS;
+  }
+
+  async checkDbState(params?: {
+    triggerDatabaseStartup: boolean;
+    startupTimeoutInMS?: number;
+    throwDescribeClusterErrors?: boolean;
+  }): Promise<boolean> {
     if (
       !this._dbState.lastCheck ||
       Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataApiDbCluster.MIN_AURORA_CLUSTER_UPTIME_SECONDS
     ) {
-      const rds = new RDS({ region: this.region });
-      const clusterRes = await rds
-        .describeDBClusters({
-          DBClusterIdentifier: this.clusterIdentifier,
-        })
-        .promise();
-      this._clusterInfo = clusterRes.DBClusters[0];
+      try {
+        const rds = new RDS({ region: this.region });
+        const clusterRes = await rds
+          .describeDBClusters({
+            DBClusterIdentifier: this.clusterIdentifier,
+          })
+          .promise();
+        this._clusterInfo = clusterRes.DBClusters[0];
 
-      this._dbState.isRunning = this._clusterInfo.Status === 'available';
-      this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+        this._dbState.isRunning = this._clusterInfo.Status === 'available';
+        this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+      } catch (err) {
+        if (params?.throwDescribeClusterErrors) {
+          throw err;
+        } else {
+          console.error('error fetching RDS cluster data ', err);
+        }
+      }
     }
 
     if (params?.triggerDatabaseStartup && !this._dbState.isRunning) {
@@ -102,7 +125,7 @@ export class AwsDataApiDbCluster {
           continueAfterTimeout: false,
           sql: 'SELECT NOW() as currenttime',
         },
-        { timeoutInMS: params.startupTimeoutInMS || 100, skipDbStateCheck: true },
+        { timeoutInMS: params.startupTimeoutInMS || 1500, skipDbStateCheck: true },
       );
     }
 
@@ -240,15 +263,20 @@ export class AwsDataApiDbCluster {
         AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
       );
 
+      const timeoutInMS = additionalParams?.timeoutInMS || this._defaultTimeoutInMS;
       let isAborted = false;
       let timeoutRef =
-        additionalParams?.timeoutInMS > 0
+        timeoutInMS > 0
           ? setTimeout(() => {
               isAborted = true;
               timeoutRef = null;
               sqlReq.abort();
-              reject(new Error(this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting'));
-            })
+              reject(
+                new Error(
+                  (this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting') + ' ' + JSON.stringify({ timeoutInMS }),
+                ),
+              );
+            }, timeoutInMS)
           : null;
 
       sqlReq.send((err, data) => {

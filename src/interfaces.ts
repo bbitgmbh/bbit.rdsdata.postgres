@@ -1,9 +1,6 @@
 import * as AWS from 'aws-sdk';
-import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
 
 export interface IAwsDataApiConfig extends IAwsDataApiQueryParams {
-  cluster: AwsDataApiDbCluster;
-  engine?: 'postgres' | 'mysql';
   transactionId?: string;
 }
 

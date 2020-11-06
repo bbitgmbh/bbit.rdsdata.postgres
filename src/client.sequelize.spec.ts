@@ -3,15 +3,20 @@ import { Sequelize, Model, DataTypes } from 'sequelize';
 
 const dbUrl = process.env.AURORA_TEST_DB_URL;
 
-console.log(dbUrl);
+if (!process.env.CI) {
+  console.log(dbUrl);
+}
 
 describe('Simulate raw postgres client', () => {
   test(
     'create table, insert and retrieve a record',
     async () => {
       const client = new lib.Client(dbUrl);
-      const options = client.getConnectionConfig().postgresDataApiClientConfig();
-      console.log(options);
+      client.dataApiClient.cluster.setDefaultTimeout(3000);
+      const options = client.dataApiClient.cluster.postgresDataApiClientConfig();
+      if (!process.env.CI) {
+        console.log(options);
+      }
 
       const sequelize = new Sequelize({
         ...(options as any),

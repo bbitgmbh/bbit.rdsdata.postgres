@@ -7,28 +7,24 @@ import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
 export class Connection extends EventEmitter {}
 
 export class Client extends EventEmitter {
-  private _client: any = null;
-  private _connectionConfig: AwsDataApiDbCluster;
+  public readonly dataApiClient: AwsDataApi = null;
 
   public connection: Connection = new Connection();
 
   constructor(config?: string | ClientConfig) {
     super();
 
-    this._connectionConfig = new AwsDataApiDbCluster(config);
-  }
-
-  getConnectionConfig(): AwsDataApiDbCluster {
-    return this._connectionConfig;
+    this.dataApiClient = new AwsDataApi(new AwsDataApiDbCluster(config), {
+      formatOptions: {
+        stringifyArrays: true,
+      },
+    });
   }
 
   connect(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
-      this._client = new AwsDataApi({
-        cluster: this._connectionConfig,
-        formatOptions: {
-          stringifyArrays: true,
-        },
+      this.dataApiClient.cluster.checkDbState({
+        triggerDatabaseStartup: true,
       });
     };
 
@@ -56,7 +52,7 @@ export class Client extends EventEmitter {
       switch (true) {
         case AwsDataApiUtils.isString(query):
           // console.log('query string', query, valuesOrCallback);
-          const result = await this._client.query(query, valuesOrCallback);
+          const result = await this.dataApiClient.query(query as string, valuesOrCallback);
           // console.log('query string', query, valuesOrCallback, result.records);
           return {
             rowCount: result.records?.length,
@@ -117,7 +113,7 @@ export class Client extends EventEmitter {
 
   end(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
-      this._client = null;
+      this.dataApiClient.clearQueue();
     };
 
     if (callback) {

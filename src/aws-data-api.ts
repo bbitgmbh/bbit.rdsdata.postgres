@@ -1,6 +1,7 @@
 import * as AWS from 'aws-sdk';
 import { SqlParametersList, SqlRecords } from 'aws-sdk/clients/rdsdataservice';
 import * as sqlString from 'sqlstring';
+import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
 import { IAwsDataApiConfig, IAwsDataApiQueryParams, IAwsDataApiQueryResult } from './interfaces';
 import { AwsDataApiUtils } from './utils';
 
@@ -294,9 +295,9 @@ export class AwsDataApi {
     reject: (err: Error) => void;
   }[] = [];
 
-  constructor(params: IAwsDataApiConfig) {
-    if (!params.cluster) {
-      AwsDataApi.error("'cluster' value required");
+  constructor(public readonly cluster: AwsDataApiDbCluster, params: IAwsDataApiConfig) {
+    if (!cluster) {
+      AwsDataApi.error("'cluster' required");
     }
 
     if (typeof params.hydrateColumnNames !== 'boolean') {
@@ -308,6 +309,10 @@ export class AwsDataApi {
     }
 
     this._config = AwsDataApiUtils.mergeConfig({ hydrateColumnNames: true }, params);
+  }
+
+  clearQueue() {
+    this._serializingQueue = [];
   }
 
   query(sql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
@@ -357,7 +362,7 @@ export class AwsDataApi {
   private async _internalQuery(inputsql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
-      { database: this._config.cluster.databaseName, schema: this._config.cluster.schema },
+      { database: this.cluster.databaseName, schema: this.cluster.schema },
       AwsDataApiUtils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'schema', 'convertSnakeToCamel']),
       queryParams || {},
     );
@@ -366,15 +371,14 @@ export class AwsDataApi {
     // Transactional overwrites
     switch (true) {
       case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
-        const beginRes = await this._config.cluster.beginTransaction();
+        const beginRes = await this.cluster.beginTransaction();
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
       case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
         const commitRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this._config.cluster.commitTransaction({ transactionId: this._config.transactionId }))
-            .transactionStatus,
+          transactionStatus: (await this.cluster.commitTransaction({ transactionId: this._config.transactionId })).transactionStatus,
         };
         this._config.transactionId = null;
         return commitRes;
@@ -382,8 +386,7 @@ export class AwsDataApi {
       case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const rollbackRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this._config.cluster.rollbackTransaction({ transactionId: this._config.transactionId }))
-            .transactionStatus,
+          transactionStatus: (await this.cluster.rollbackTransaction({ transactionId: this._config.transactionId })).transactionStatus,
         };
         this._config.transactionId = null;
         return rollbackRes;
@@ -406,7 +409,7 @@ export class AwsDataApi {
     };
 
     try {
-      const result = await this._config.cluster.executeStatement(params, { timeoutInMS: queryParams?.queryTimeout });
+      const result = await this.cluster.executeStatement(params, { timeoutInMS: queryParams?.queryTimeout });
 
       // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(
@@ -475,11 +478,11 @@ export class AwsDataApi {
   } */
 
   async transaction<T>(lambda: (client: AwsDataApi) => Promise<T>): Promise<T> {
-    const transactionalClient = new AwsDataApi({ ...this._config, transactionId: null });
+    const transactionalClient = new AwsDataApi(this.cluster, { ...this._config, transactionId: null });
 
     await transactionalClient.query('BEGIN');
 
-    let res;
+    let res: T;
     try {
       res = await lambda(transactionalClient);
       await transactionalClient.query('COMMIT');

@@ -4,7 +4,7 @@ import { AwsDataApiUtils, UnixEpochTimestamp } from './utils';
 import { DbName, Id, ResultSetOptions, SqlParameterSets, SqlParametersList, SqlStatement } from 'aws-sdk/clients/rdsdataservice';
 import { DBCluster } from 'aws-sdk/clients/rds';
 
-export class AwsDataApiDbCluster {
+export class AwsDataRawApi {
   public readonly secretArn: string;
   public readonly resourceArn: string;
   public readonly clusterIdentifier: string;
@@ -15,15 +15,71 @@ export class AwsDataApiDbCluster {
   private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
   private _rds: RDSDataService;
   private _clusterInfo: DBCluster;
-  private _defaultTimeoutInMS: number;
+  private _defaultQueryTimeoutInMS: number;
 
   public static MIN_AURORA_CLUSTER_UPTIME_SECONDS = 5 * 60;
 
-  static getDbUrl(clusterId: string, secretArn: string, dbName: string) {
-    //  `awsrds://${encodeURIComponent(env.organizationKey + '_' + env.environmentKey)}:rds-db-credentials%2Fcluster-75GH5UAKZ4IQNT3OARJMZOSS24%2Fpostgres-jyn7oj@eu-central-1.064168052826.aws/bbit-database`
+  static getDbUrl(clusterId: string, secretArn: string, dbName: string, params?: { querytimeout?: number; schema?: string }) {
+    // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}?param=value
     const [, , , region, account, , secretName] = secretArn.split(':');
 
-    return `awsrds://${dbName}:${encodeURIComponent(secretName)}@${region}.${account}.aws/${encodeURIComponent(clusterId)}`;
+    const paramsKeyValue = params
+      ? Object.keys(params).reduce((acc, key) => acc.concat(`${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`), [])
+      : [];
+
+    return `awsrds://${dbName}:${encodeURIComponent(secretName)}@${region}.${account}.aws/${encodeURIComponent(clusterId)}${
+      paramsKeyValue?.length > 0 ? '?' + paramsKeyValue.join('&') : ''
+    }`;
+  }
+
+  static splitSecretArn(secretArn: string) {
+    if (!secretArn) {
+      return null;
+    }
+
+    if (!AwsDataApiUtils.isString(secretArn)) {
+      throw new Error("'secretArn' string value required");
+    }
+
+    if (!secretArn.startsWith('arn:')) {
+      throw new Error('secret arn must start with arn:');
+    }
+
+    // arn:aws:secretsmanager:eu-central-1:XXXXX:secret:rds-db-credentials/cluster-XXXXX/postgres-xxxx
+    const [, , service, region, account, type, secretName] = secretArn.split(':');
+
+    if (service !== 'secretsmanager') {
+      throw new Error('secret arn must be a secretsmanager ARN');
+    }
+
+    if (type !== 'secret') {
+      throw new Error('secret arn type must be secret');
+    }
+
+    return {
+      service,
+      region,
+      type,
+      account,
+      secretName,
+    };
+  }
+
+  static getDbUrlFromConfig(config: ClientConfig) {
+    const secret = AwsDataRawApi.splitSecretArn(config.password);
+    if (!secret) {
+      throw new Error('invalid secret-arn');
+    }
+
+    let params = config.user?.startsWith('awsDataApi:') ? '?' + config.user.replace(/^awsDataApi:/i, '') : '';
+
+    if (config.query_timeout) {
+      params += '&querytimeout=' + config.query_timeout;
+    }
+
+    return `awsrds://${config.database}:${encodeURIComponent(secret.secretName)}@${secret.region}.${
+      secret.account
+    }.aws/${encodeURIComponent(config.host)}${params}`;
   }
 
   constructor(
@@ -40,37 +96,43 @@ export class AwsDataApiDbCluster {
     }
 
     this.schema = additionalConfig?.defaultSchema;
-    this._defaultTimeoutInMS = additionalConfig?.defaultTimeoutInMS;
+    this._defaultQueryTimeoutInMS = additionalConfig?.defaultTimeoutInMS;
 
-    if (AwsDataApiUtils.isString(config)) {
-      // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}
-      const url = new URL(config);
-      if (url.protocol !== 'awsrds:') {
-        throw new Error('unknown protocol ' + url.protocol);
-      }
-      const [region, account] = url.hostname.split('.');
-      const secret = decodeURIComponent(url.password);
+    const awsrdsUrl = AwsDataApiUtils.isString(config) ? config : AwsDataRawApi.getDbUrlFromConfig(config);
 
-      this.region = region;
-      this.clusterIdentifier = decodeURIComponent(url.pathname.replace(/^\//, ''));
-      this.databaseName = decodeURIComponent(url.username);
-      this.secretArn = `arn:aws:secretsmanager:${region}:${account}:secret:${secret}`;
-      this.resourceArn = `arn:aws:rds:${region}:${account}:cluster:${this.clusterIdentifier}`;
-    } else {
-      const [, , service, region] = config.host.split(':');
+    // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}?param=value
+    const url = new URL(awsrdsUrl);
+    if (url.protocol !== 'awsrds:') {
+      throw new Error('unknown protocol ' + url.protocol + ' . must be awsrds://');
+    }
+    const [region, account] = url.hostname.split('.');
+    const secret = decodeURIComponent(url.password);
 
-      if (service !== 'rds') {
-        throw new Error('host must be an AWS RDS arn');
-      }
-
-      this.region = region;
-      this.databaseName = config.database;
-      this.secretArn = config.password;
-      this.resourceArn = config.host;
+    if (!region || region.length === 0) {
+      throw new Error('AwsDataApi: region must be defined');
     }
 
-    if (!AwsDataApiUtils.isString(this.secretArn)) {
-      throw new Error("'secretArn' string value required");
+    if (!account || account.length === 0) {
+      throw new Error('AwsDataApi: region must be defined');
+    }
+
+    this.region = region;
+    this.clusterIdentifier = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    this.databaseName = decodeURIComponent(url.username);
+    this.secretArn = `arn:aws:secretsmanager:${region}:${account}:secret:${secret}`;
+    this.resourceArn = `arn:aws:rds:${region}:${account}:cluster:${this.clusterIdentifier}`;
+
+    if (url.searchParams) {
+      for (const [key, value] of url.searchParams) {
+        switch (key.toLowerCase()) {
+          case 'querytimeout':
+            this._defaultQueryTimeoutInMS = Number(value);
+            break;
+          case 'schema':
+            this.schema = value;
+            break;
+        }
+      }
     }
 
     if (!AwsDataApiUtils.isString(this.resourceArn)) {
@@ -81,9 +143,9 @@ export class AwsDataApiDbCluster {
       throw new Error("'database' string value required");
     }
 
-    // temporary warning since AWS seems to have trouble with those
+    // temporary error since AWS seems to have trouble with those
     if (/[:@]/gi.test(this.databaseName)) {
-      console.warn('database name may not contain url special chars');
+      throw new Error("'database' name may not contain url special chars");
     }
 
     if (additionalConfig?.client) {
@@ -93,61 +155,67 @@ export class AwsDataApiDbCluster {
     }
   }
 
-  setDefaultTimeout(timeoutInMS: number): void {
-    this._defaultTimeoutInMS = timeoutInMS;
+  setDefaultQueryTimeout(timeoutInMS: number): void {
+    this._defaultQueryTimeoutInMS = timeoutInMS;
   }
 
-  async checkDbState(params?: {
-    triggerDatabaseStartup: boolean;
-    startupTimeoutInMS?: number;
-    throwDescribeClusterErrors?: boolean;
-  }): Promise<boolean> {
+  async checkDbState(params?: { startupTimeoutInMS?: number }): Promise<boolean> {
     if (
+      !this._dbState.isRunning ||
       !this._dbState.lastCheck ||
-      Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataApiDbCluster.MIN_AURORA_CLUSTER_UPTIME_SECONDS
+      Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataRawApi.MIN_AURORA_CLUSTER_UPTIME_SECONDS
     ) {
-      try {
-        const rds = new RDS({ region: this.region });
-        const clusterRes = await rds
-          .describeDBClusters({
-            DBClusterIdentifier: this.clusterIdentifier,
-          })
-          .promise();
-        this._clusterInfo = clusterRes.DBClusters[0];
-
-        this._dbState.isRunning = this._clusterInfo.Status === 'available';
-        this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
-      } catch (err) {
-        if (params?.throwDescribeClusterErrors) {
-          throw err;
-        } else {
-          console.error('error fetching RDS cluster data ', err);
-        }
-      }
-    }
-
-    if (params?.triggerDatabaseStartup && !this._dbState.isRunning) {
-      this.executeStatement(
+      await this.executeStatement(
         {
           continueAfterTimeout: false,
           sql: 'SELECT NOW() as currenttime',
         },
-        { timeoutInMS: params.startupTimeoutInMS || 1500, skipDbStateCheck: true },
+        { queryTimeoutInMS: params?.startupTimeoutInMS || 1000, skipDbStateCheck: true },
       );
     }
 
     return this._dbState.isRunning;
   }
 
-  getClusterInfo(): DBCluster {
+  async getClusterInfo(params?: { skipCache?: boolean }): Promise<DBCluster> {
+    if (!this._clusterInfo || !params?.skipCache) {
+      const rds = new RDS({ region: this.region });
+      const clusterRes = await rds
+        .describeDBClusters({
+          DBClusterIdentifier: this.clusterIdentifier,
+        })
+        .promise();
+      this._clusterInfo = clusterRes.DBClusters[0];
+
+      // this line here does not work yet as expected
+      // this._dbState.isRunning = this._clusterInfo.Status === 'available';
+      // this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+    }
+
     return this._clusterInfo;
   }
 
   postgresDataApiClientConfig(): ClientConfig {
+    const params: Record<string, any> = {
+      region: this.region,
+    };
+
+    if (this.schema) {
+      params.schema = this.schema;
+    }
+
+    if (this._defaultQueryTimeoutInMS) {
+      params.timeout = this._defaultQueryTimeoutInMS;
+    }
+
     return {
-      user: 'aws:' + this.region,
+      user:
+        'awsDataApi:' +
+        Object.keys(params)
+          .reduce((acc, key) => acc.concat(`${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`), [])
+          .join('&'),
       password: this.secretArn,
-      host: this.resourceArn,
+      host: this.clusterIdentifier,
       port: 443,
       database: this.databaseName,
     } as any;
@@ -257,12 +325,12 @@ export class AwsDataApiDbCluster {
       transactionId?: Id;
     },
     additionalParams?: {
-      timeoutInMS?: number;
+      queryTimeoutInMS?: number;
       skipDbStateCheck?: boolean;
     },
   ): Promise<RDSDataService.ExecuteStatementResponse> {
     if (!additionalParams?.skipDbStateCheck) {
-      await this.checkDbState({ triggerDatabaseStartup: true });
+      await this.checkDbState();
     }
 
     return new Promise((resolve, reject) => {
@@ -270,7 +338,7 @@ export class AwsDataApiDbCluster {
         AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
       );
 
-      const timeoutInMS = additionalParams?.timeoutInMS || this._defaultTimeoutInMS;
+      const timeoutInMS = additionalParams?.queryTimeoutInMS || this._defaultQueryTimeoutInMS;
       let isAborted = false;
       let timeoutRef =
         timeoutInMS > 0

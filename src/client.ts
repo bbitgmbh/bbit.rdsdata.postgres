@@ -2,7 +2,7 @@ import { ClientConfig, QueryArrayConfig, QueryArrayResult, QueryConfig, QueryRes
 import { EventEmitter } from 'events';
 import { AwsDataApi } from './aws-data-api';
 import { AwsDataApiUtils } from './utils';
-import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
+import { AwsDataRawApi } from './aws-data-raw-api';
 
 export class Connection extends EventEmitter {}
 
@@ -14,7 +14,7 @@ export class Client extends EventEmitter {
   constructor(config?: string | ClientConfig) {
     super();
 
-    this.dataApiClient = new AwsDataApi(new AwsDataApiDbCluster(config), {
+    this.dataApiClient = new AwsDataApi(new AwsDataRawApi(config), {
       formatOptions: {
         stringifyArrays: true,
       },
@@ -23,9 +23,7 @@ export class Client extends EventEmitter {
 
   connect(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
-      this.dataApiClient.cluster.checkDbState({
-        triggerDatabaseStartup: true,
-      });
+      this.dataApiClient.raw.checkDbState();
     };
 
     if (callback) {

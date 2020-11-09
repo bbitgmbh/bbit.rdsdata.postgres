@@ -1,7 +1,7 @@
 import * as AWS from 'aws-sdk';
 import { SqlParametersList, SqlRecords } from 'aws-sdk/clients/rdsdataservice';
 import * as sqlString from 'sqlstring';
-import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
+import { AwsDataRawApi } from './aws-data-raw-api';
 import { IAwsDataApiConfig, IAwsDataApiQueryParams, IAwsDataApiQueryResult } from './interfaces';
 import { AwsDataApiUtils } from './utils';
 
@@ -295,9 +295,9 @@ export class AwsDataApi {
     reject: (err: Error) => void;
   }[] = [];
 
-  constructor(public readonly cluster: AwsDataApiDbCluster, params: IAwsDataApiConfig) {
-    if (!cluster) {
-      AwsDataApi.error("'cluster' required");
+  constructor(public readonly raw: AwsDataRawApi, params: IAwsDataApiConfig) {
+    if (!raw) {
+      AwsDataApi.error("'raw' constructor parameter required");
     }
 
     if (typeof params.hydrateColumnNames !== 'boolean') {
@@ -362,7 +362,7 @@ export class AwsDataApi {
   private async _internalQuery(inputsql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
-      { database: this.cluster.databaseName, schema: this.cluster.schema },
+      { database: this.raw.databaseName, schema: this.raw.schema },
       AwsDataApiUtils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'schema', 'convertSnakeToCamel']),
       queryParams || {},
     );
@@ -371,14 +371,14 @@ export class AwsDataApi {
     // Transactional overwrites
     switch (true) {
       case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
-        const beginRes = await this.cluster.beginTransaction();
+        const beginRes = await this.raw.beginTransaction();
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
       case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
         const commitRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this.cluster.commitTransaction({ transactionId: this._config.transactionId })).transactionStatus,
+          transactionStatus: (await this.raw.commitTransaction({ transactionId: this._config.transactionId })).transactionStatus,
         };
         this._config.transactionId = null;
         return commitRes;
@@ -386,7 +386,7 @@ export class AwsDataApi {
       case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const rollbackRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this.cluster.rollbackTransaction({ transactionId: this._config.transactionId })).transactionStatus,
+          transactionStatus: (await this.raw.rollbackTransaction({ transactionId: this._config.transactionId })).transactionStatus,
         };
         this._config.transactionId = null;
         return rollbackRes;
@@ -409,7 +409,7 @@ export class AwsDataApi {
     };
 
     try {
-      const result = await this.cluster.executeStatement(params, { timeoutInMS: queryParams?.queryTimeout });
+      const result = await this.raw.executeStatement(params, { queryTimeoutInMS: queryParams?.queryTimeout });
 
       // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(
@@ -478,7 +478,7 @@ export class AwsDataApi {
   } */
 
   async transaction<T>(lambda: (client: AwsDataApi) => Promise<T>): Promise<T> {
-    const transactionalClient = new AwsDataApi(this.cluster, { ...this._config, transactionId: null });
+    const transactionalClient = new AwsDataApi(this.raw, { ...this._config, transactionId: null });
 
     await transactionalClient.query('BEGIN');
 

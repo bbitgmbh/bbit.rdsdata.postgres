@@ -1,14 +1,15 @@
-import { AwsDataApiDbCluster } from './aws-data-api-db-cluster';
+import { AwsDataRawApi } from './aws-data-raw-api';
 
 const dbUrl = process.env.AURORA_TEST_DB_URL;
+if (!process.env.CI) {
+  console.log('dbUrl', dbUrl);
+}
 
 // file.only
 
-console.log(dbUrl);
-
 describe('config tests', () => {
-  test('get cionfig test', async () => {
-    const client = new AwsDataApiDbCluster(dbUrl);
+  test('get config test', async () => {
+    const client = new AwsDataRawApi(dbUrl);
     expect(client.region.length).toBeGreaterThan(0);
 
     const rawConfig = await client.postgresNativeClientConfig();
@@ -26,15 +27,18 @@ describe('config tests', () => {
   });
 
   test('db state', async () => {
-    const client = new AwsDataApiDbCluster(dbUrl);
+    const client = new AwsDataRawApi(dbUrl);
 
+    let isRunning: boolean;
     try {
-      const isRunning = await client.checkDbState({ triggerDatabaseStartup: true });
-      expect(isRunning).toBe(true);
+      isRunning = await client.checkDbState();
     } catch (err) {
+      err; //?
       expect(err.code).toBe('db-cluster-is-starting');
       return;
     }
+
+    expect(isRunning).toBe(true);
 
     if (!process.env.CI) {
       console.log(client.getClusterInfo());

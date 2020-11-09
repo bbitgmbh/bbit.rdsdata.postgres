@@ -6,12 +6,9 @@ if (!process.env.CI) {
   console.log(dbUrl);
 }
 
-const defaultTimeout = 3000;
-
 describe('Simulate raw postgres client', () => {
   test('simple string query', async () => {
     const client = new RawClient(dbUrl);
-    client.dataApiClient.cluster.setDefaultTimeout(defaultTimeout);
 
     await client.connect();
     const res = await client.query('SELECT NOW() as message');
@@ -22,7 +19,6 @@ describe('Simulate raw postgres client', () => {
 
   test('query with params', async () => {
     const client = new RawClient(dbUrl);
-    client.dataApiClient.cluster.setDefaultTimeout(defaultTimeout);
 
     await client.connect();
     const res = await client.query('select * from information_schema.tables where table_name = :name ', { name: 'pg_tables' });
@@ -34,7 +30,6 @@ describe('Simulate raw postgres client', () => {
 
   test('query with array', async () => {
     const client = new RawClient(dbUrl);
-    client.dataApiClient.cluster.setDefaultTimeout(defaultTimeout);
 
     await client.connect();
     const res = await client.query("SELECT ARRAY['key', 'value', 'key key', 'value value'] as stringArrayOne");
@@ -47,7 +42,6 @@ describe('Simulate raw postgres client', () => {
 
   test('query with positional parameters', async () => {
     const client = new RawClient(dbUrl);
-    client.dataApiClient.cluster.setDefaultTimeout(defaultTimeout);
 
     await client.connect();
     const res = await client.query('select * from information_schema.tables where table_name = $1 ', ['pg_tables']);

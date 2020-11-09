@@ -156,7 +156,7 @@ export class AwsDataRawApi {
     ) {
       await this.executeStatement(
         {
-          continueAfterTimeout: false,
+          continueAfterTimeout: true,
           sql: 'SELECT NOW() as currenttime',
         },
         { queryTimeoutInMS: params?.startupTimeoutInMS || 1000, skipDbStateCheck: true },

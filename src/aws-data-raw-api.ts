@@ -148,18 +148,30 @@ export class AwsDataRawApi {
     }
   }
 
-  async checkDbState(params?: { startupTimeoutInMS?: number }): Promise<boolean> {
+  async checkDbState(params?: { awaitStartup?: boolean }): Promise<boolean> {
     if (
       !this._dbState.isRunning ||
       !this._dbState.lastCheck ||
       Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataRawApi.MIN_AURORA_CLUSTER_UPTIME_SECONDS
     ) {
+      const defaultTimeout = (params?.awaitStartup ? 60 : 1) * 1000;
+
+      try {
+        await this.getClusterInfo();
+
+        if (this._dbState.isRunning) {
+          return this._dbState.isRunning;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+
       await this.executeStatement(
         {
           continueAfterTimeout: true,
           sql: 'SELECT NOW() as currenttime',
         },
-        { queryTimeoutInMS: params?.startupTimeoutInMS || 1000, skipDbStateCheck: true },
+        { queryTimeoutInMS: defaultTimeout, skipDbStateCheck: true },
       );
     }
 
@@ -176,9 +188,8 @@ export class AwsDataRawApi {
         .promise();
       this._clusterInfo = clusterRes.DBClusters[0];
 
-      // this line here does not work yet as expected
-      // this._dbState.isRunning = this._clusterInfo.Status === 'available';
-      // this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+      this._dbState.isRunning = this._clusterInfo.Capacity > 0;
+      this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
     }
 
     return this._clusterInfo;

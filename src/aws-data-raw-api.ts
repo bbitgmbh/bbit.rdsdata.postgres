@@ -171,7 +171,7 @@ export class AwsDataRawApi {
   }
 
   async getClusterInfo(params?: { skipCache?: boolean }): Promise<DBCluster> {
-    if (!this._clusterInfo || !params?.skipCache) {
+    if (!this._clusterInfo || params?.skipCache) {
       const rds = new RDS({ region: this.region });
       const clusterRes = await rds
         .describeDBClusters({

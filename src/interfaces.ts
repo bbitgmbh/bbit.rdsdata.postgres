@@ -1,10 +1,10 @@
 import * as AWS from 'aws-sdk';
 
 export interface IAwsDataRawApiConfig {
-  defaultSchema?: string;
+  schema?: string;
   rdsOptions?: AWS.RDSDataService.ClientConfiguration;
   client?: AWS.RDSDataService;
-  defaultQueryTimeoutInMS?: number;
+  queryTimeoutInMS?: number;
 }
 
 export interface IAwsDataApiQueryParams extends IAwsDataRawApiConfig {

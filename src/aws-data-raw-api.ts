@@ -12,11 +12,11 @@ export class AwsDataRawApi {
   public readonly databaseName: string;
   public readonly region: string;
   public readonly schema: string;
+  public readonly queryTimeoutInMS: number;
 
   private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
   private _rds: RDSDataService;
   private _clusterInfo: DBCluster;
-  private _defaultQueryTimeoutInMS: number;
 
   public static MIN_AURORA_CLUSTER_UPTIME_SECONDS = 5 * 60;
 
@@ -88,8 +88,8 @@ export class AwsDataRawApi {
       throw new Error('config must be provided');
     }
 
-    this.schema = additionalConfig?.defaultSchema;
-    this._defaultQueryTimeoutInMS = additionalConfig?.defaultQueryTimeoutInMS;
+    this.schema = additionalConfig?.schema;
+    this.queryTimeoutInMS = additionalConfig?.queryTimeoutInMS;
 
     const awsrdsUrl = AwsDataApiUtils.isString(config) ? config : AwsDataRawApi.getDbUrlFromConfig(config);
 
@@ -119,7 +119,7 @@ export class AwsDataRawApi {
       for (const [key, value] of url.searchParams) {
         switch (key.toLowerCase()) {
           case 'querytimeout':
-            this._defaultQueryTimeoutInMS = Number(value);
+            this.queryTimeoutInMS = Number(value);
             break;
           case 'schema':
             this.schema = value;
@@ -146,10 +146,6 @@ export class AwsDataRawApi {
     } else {
       this._rds = new RDSDataService(AwsDataApiUtils.mergeConfig({ region: this.region }, additionalConfig?.rdsOptions || {}));
     }
-  }
-
-  setDefaultQueryTimeout(timeoutInMS: number): void {
-    this._defaultQueryTimeoutInMS = timeoutInMS;
   }
 
   async checkDbState(params?: { startupTimeoutInMS?: number }): Promise<boolean> {
@@ -197,8 +193,8 @@ export class AwsDataRawApi {
       params.schema = this.schema;
     }
 
-    if (this._defaultQueryTimeoutInMS) {
-      params.timeout = this._defaultQueryTimeoutInMS;
+    if (this.queryTimeoutInMS) {
+      params.timeout = this.queryTimeoutInMS;
     }
 
     return {
@@ -331,7 +327,7 @@ export class AwsDataRawApi {
         AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
       );
 
-      const timeoutInMS = additionalParams?.queryTimeoutInMS || this._defaultQueryTimeoutInMS;
+      const timeoutInMS = additionalParams?.queryTimeoutInMS || this.queryTimeoutInMS;
       let isAborted = false;
       let timeoutRef =
         timeoutInMS > 0

@@ -12,7 +12,6 @@ describe('Simulate raw postgres client', () => {
     'create table, insert and retrieve a record',
     async () => {
       const client = new lib.Client(dbUrl);
-      client.dataApiClient.raw.setDefaultQueryTimeout(3000);
       const options = client.dataApiClient.raw.postgresDataApiClientConfig();
       if (!process.env.CI) {
         console.log(options);

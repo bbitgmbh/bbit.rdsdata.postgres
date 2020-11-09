@@ -409,7 +409,7 @@ export class AwsDataApi {
     };
 
     try {
-      const result = await this.raw.executeStatement(params, { queryTimeoutInMS: queryParams?.defaultQueryTimeoutInMS });
+      const result = await this.raw.executeStatement(params, { queryTimeoutInMS: queryParams?.queryTimeoutInMS });
 
       // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(

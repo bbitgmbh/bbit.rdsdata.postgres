@@ -298,6 +298,10 @@ export class AwsDataApi {
   public raw: AwsDataRawApi;
 
   constructor(public readonly connectionConfig: string | ClientConfig, additionalConfig?: IAwsDataApiConfig) {
+    if (!additionalConfig) {
+      additionalConfig = {};
+    }
+
     this.raw = new AwsDataRawApi(connectionConfig, additionalConfig);
 
     if (typeof additionalConfig.hydrateColumnNames !== 'boolean') {

@@ -1,12 +1,13 @@
 import * as AWS from 'aws-sdk';
 
-export interface IAwsDataApiConfig extends IAwsDataApiQueryParams {
-  transactionId?: string;
+export interface IAwsDataRawApiConfig {
+  defaultSchema?: string;
+  rdsOptions?: AWS.RDSDataService.ClientConfiguration;
+  client?: AWS.RDSDataService;
+  defaultQueryTimeoutInMS?: number;
 }
 
-export interface IAwsDataApiQueryParams {
-  schema?: string;
-  queryTimeout?: number;
+export interface IAwsDataApiQueryParams extends IAwsDataRawApiConfig {
   hydrateColumnNames?: boolean;
   maxConcurrentQueries?: number;
   formatOptions?: {
@@ -15,6 +16,10 @@ export interface IAwsDataApiQueryParams {
     stringifyArrays?: boolean;
   };
   convertSnakeToCamel?: boolean;
+}
+
+export interface IAwsDataApiConfig extends IAwsDataApiQueryParams {
+  transactionId?: string;
 }
 
 export interface IAwsDataApiQueryResult {

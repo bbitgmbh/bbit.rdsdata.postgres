@@ -3,6 +3,7 @@ import { ClientConfig } from 'pg';
 import { AwsDataApiUtils, UnixEpochTimestamp } from './utils';
 import { DbName, Id, ResultSetOptions, SqlParameterSets, SqlParametersList, SqlStatement } from 'aws-sdk/clients/rdsdataservice';
 import { DBCluster } from 'aws-sdk/clients/rds';
+import { IAwsDataRawApiConfig } from './interfaces';
 
 export class AwsDataRawApi {
   public readonly secretArn: string;
@@ -82,21 +83,13 @@ export class AwsDataRawApi {
     }.aws/${encodeURIComponent(config.host)}${params}`;
   }
 
-  constructor(
-    config?: string | ClientConfig,
-    additionalConfig?: {
-      defaultSchema?: string;
-      rdsOptions?: AWS.RDSDataService.ClientConfiguration;
-      client?: RDSDataService;
-      defaultTimeoutInMS: number;
-    },
-  ) {
+  constructor(config: string | ClientConfig, additionalConfig?: IAwsDataRawApiConfig) {
     if (!config) {
-      return;
+      throw new Error('config must be provided');
     }
 
     this.schema = additionalConfig?.defaultSchema;
-    this._defaultQueryTimeoutInMS = additionalConfig?.defaultTimeoutInMS;
+    this._defaultQueryTimeoutInMS = additionalConfig?.defaultQueryTimeoutInMS;
 
     const awsrdsUrl = AwsDataApiUtils.isString(config) ? config : AwsDataRawApi.getDbUrlFromConfig(config);
 

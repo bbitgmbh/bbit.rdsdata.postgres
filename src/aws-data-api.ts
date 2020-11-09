@@ -1,5 +1,6 @@
 import * as AWS from 'aws-sdk';
 import { SqlParametersList, SqlRecords } from 'aws-sdk/clients/rdsdataservice';
+import { ClientConfig } from 'pg';
 import * as sqlString from 'sqlstring';
 import { AwsDataRawApi } from './aws-data-raw-api';
 import { IAwsDataApiConfig, IAwsDataApiQueryParams, IAwsDataApiQueryResult } from './interfaces';
@@ -294,21 +295,20 @@ export class AwsDataApi {
     resolve: (value: IAwsDataApiQueryResult) => void;
     reject: (err: Error) => void;
   }[] = [];
+  public raw: AwsDataRawApi;
 
-  constructor(public readonly raw: AwsDataRawApi, params: IAwsDataApiConfig) {
-    if (!raw) {
-      AwsDataApi.error("'raw' constructor parameter required");
+  constructor(public readonly connectionConfig: string | ClientConfig, additionalConfig?: IAwsDataApiConfig) {
+    this.raw = new AwsDataRawApi(connectionConfig, additionalConfig);
+
+    if (typeof additionalConfig.hydrateColumnNames !== 'boolean') {
+      additionalConfig.hydrateColumnNames = true;
     }
 
-    if (typeof params.hydrateColumnNames !== 'boolean') {
-      params.hydrateColumnNames = true;
+    if (!AwsDataApiUtils.isObject(additionalConfig.formatOptions)) {
+      additionalConfig.formatOptions = {} as any;
     }
 
-    if (!AwsDataApiUtils.isObject(params.formatOptions)) {
-      params.formatOptions = {} as any;
-    }
-
-    this._config = AwsDataApiUtils.mergeConfig({ hydrateColumnNames: true }, params);
+    this._config = AwsDataApiUtils.mergeConfig({ hydrateColumnNames: true }, additionalConfig);
   }
 
   clearQueue() {
@@ -409,7 +409,7 @@ export class AwsDataApi {
     };
 
     try {
-      const result = await this.raw.executeStatement(params, { queryTimeoutInMS: queryParams?.queryTimeout });
+      const result = await this.raw.executeStatement(params, { queryTimeoutInMS: queryParams?.defaultQueryTimeoutInMS });
 
       // console.log('query params', JSON.stringify(params, null, 3), ' --> ', result.records);
       return Object.assign(
@@ -478,7 +478,7 @@ export class AwsDataApi {
   } */
 
   async transaction<T>(lambda: (client: AwsDataApi) => Promise<T>): Promise<T> {
-    const transactionalClient = new AwsDataApi(this.raw, { ...this._config, transactionId: null });
+    const transactionalClient = new AwsDataApi(this.connectionConfig, { ...this._config, transactionId: null });
 
     await transactionalClient.query('BEGIN');
 

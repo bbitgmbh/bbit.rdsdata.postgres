@@ -2,7 +2,6 @@ import { ClientConfig, QueryArrayConfig, QueryArrayResult, QueryConfig, QueryRes
 import { EventEmitter } from 'events';
 import { AwsDataApi } from './aws-data-api';
 import { AwsDataApiUtils } from './utils';
-import { AwsDataRawApi } from './aws-data-raw-api';
 
 export class Connection extends EventEmitter {}
 
@@ -14,7 +13,7 @@ export class Client extends EventEmitter {
   constructor(config?: string | ClientConfig) {
     super();
 
-    this.dataApiClient = new AwsDataApi(new AwsDataRawApi(config), {
+    this.dataApiClient = new AwsDataApi(config, {
       formatOptions: {
         stringifyArrays: true,
       },

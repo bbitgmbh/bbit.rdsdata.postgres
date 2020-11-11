@@ -13,6 +13,7 @@ export class AwsDataRawApi {
   public readonly region: string;
   public readonly schema: string;
   public readonly queryTimeoutInMS: number;
+  public readonly defaultAwaitStartup: boolean;
 
   private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
   private _rds: RDSDataService;
@@ -20,7 +21,12 @@ export class AwsDataRawApi {
 
   public static MIN_AURORA_CLUSTER_UPTIME_SECONDS = 5 * 60;
 
-  static getDbUrl(clusterId: string, secretArn: string, dbName: string, params?: { querytimeout?: number; schema?: string }) {
+  static getDbUrl(
+    clusterId: string,
+    secretArn: string,
+    dbName: string,
+    params?: { querytimeout?: number; schema?: string; awaitstartup?: boolean },
+  ) {
     // awsrds://{databaseName}:{awsSecretName}@{awsRegion}.{awsAccount}.aws/{awsRdsClustername}?param=value
     const [, , , region, account, , secretName] = secretArn.split(':');
 
@@ -90,6 +96,7 @@ export class AwsDataRawApi {
 
     this.schema = additionalConfig?.schema;
     this.queryTimeoutInMS = additionalConfig?.queryTimeoutInMS;
+    this.defaultAwaitStartup = !!additionalConfig?.awaitStartup;
 
     const awsrdsUrl = AwsDataApiUtils.isString(config) ? config : AwsDataRawApi.getDbUrlFromConfig(config);
 
@@ -124,6 +131,8 @@ export class AwsDataRawApi {
           case 'schema':
             this.schema = value;
             break;
+          case 'awaitstartup':
+            this.defaultAwaitStartup = value !== 'false' && value !== '0';
         }
       }
     }
@@ -154,7 +163,8 @@ export class AwsDataRawApi {
       !this._dbState.lastCheck ||
       Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataRawApi.MIN_AURORA_CLUSTER_UPTIME_SECONDS
     ) {
-      const defaultTimeout = (params?.awaitStartup ? 60 : 1) * 1000;
+      const awaitStartup = params?.awaitStartup ?? this.defaultAwaitStartup;
+      const defaultTimeout = (awaitStartup ? 60 : 1) * 1000;
 
       try {
         await this.getClusterInfo();

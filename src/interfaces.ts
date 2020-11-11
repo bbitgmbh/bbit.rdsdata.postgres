@@ -5,6 +5,7 @@ export interface IAwsDataRawApiConfig {
   rdsOptions?: AWS.RDSDataService.ClientConfiguration;
   client?: AWS.RDSDataService;
   queryTimeoutInMS?: number;
+  awaitStartup?: boolean;
 }
 
 export interface IAwsDataApiQueryParams extends IAwsDataRawApiConfig {

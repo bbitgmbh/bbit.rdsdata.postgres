@@ -164,7 +164,7 @@ export class AwsDataRawApi {
       Math.abs(this._dbState.lastCheck - AwsDataApiUtils.getUnixEpochTimestamp()) > AwsDataRawApi.MIN_AURORA_CLUSTER_UPTIME_SECONDS
     ) {
       const awaitStartup = params?.awaitStartup ?? this.defaultAwaitStartup;
-      const defaultTimeout = (awaitStartup ? 60 : 1) * 1000;
+      const defaultTimeout = (awaitStartup ? 60 : 5) * 1000;
 
       try {
         await this.getClusterInfo();

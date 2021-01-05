@@ -197,7 +197,7 @@ export class AwsDataApi {
   // Formats the (UTC) date to the AWS accepted YYYY-MM-DD HH:MM:SS[.FFF] format
   // See https://docs.aws.amazon.com/rdsdataservice/latest/APIReference/API_SqlParameter.html
   static formatToTimeStamp(date: Date, treatAsLocalDate: boolean) {
-    const pad = (val, num = 2) => '0'.repeat(num - (val + '').length) + val;
+    const pad = (val: number, num = 2) => '0'.repeat(num - (val + '').length) + val;
 
     const year = treatAsLocalDate ? date.getFullYear() : date.getUTCFullYear();
     const month = (treatAsLocalDate ? date.getMonth() : date.getUTCMonth()) + 1; // Convert to human month
@@ -223,7 +223,7 @@ export class AwsDataApi {
         ? recs[0].map<{ label: string; typeName: string; fieldKey: string }>((x, i) => ({
             label: columns && columns.length ? columns[i].label : 'col' + i,
             typeName: columns && columns.length ? columns[i].typeName : undefined,
-            fieldKey: Object.keys(x).filter((type) => type !== 'isNull' && !!x[type])[0],
+            fieldKey: Object.keys(x).filter((type) => type !== 'isNull' && x[type] !== undefined && x[type] !== null)[0],
           }))
         : [];
 

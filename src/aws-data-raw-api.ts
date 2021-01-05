@@ -356,7 +356,7 @@ export class AwsDataRawApi {
 
     args.sql = theSql;
 
-    console.log('execute sql', args);
+    console.log('execute sql', args, additionalParams);
 
     return new Promise((resolve, reject) => {
       const sqlReq = this._rds.executeStatement(

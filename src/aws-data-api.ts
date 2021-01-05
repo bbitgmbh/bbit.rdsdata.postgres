@@ -383,23 +383,25 @@ export class AwsDataApi {
       case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
       case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const currentTransactionId = this._config.transactionId;
+        if (currentTransactionId) {
+          const isCommit = inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT';
 
-        const func =
-          inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT' ? this.raw.commitTransaction : this.raw.rollbackTransaction;
+          const func = isCommit ? this.raw.commitTransaction : this.raw.rollbackTransaction;
 
-        this._config.transactionId = null;
+          this._config.transactionId = null;
 
-        const commitRes = await func({
-          ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
-          transactionId: currentTransactionId,
-        });
+          const commitRes = await func({
+            ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
+            transactionId: currentTransactionId,
+          });
 
-        // this is not executed: WHY????? console.log(this._config, currentTransactionId);
+          // this is not executed: WHY????? console.log(this._config, currentTransactionId);
 
-        return {
-          transactionId: currentTransactionId,
-          transactionStatus: commitRes.transactionStatus,
-        };
+          return {
+            transactionId: currentTransactionId,
+            transactionStatus: commitRes.transactionStatus,
+          };
+        }
 
       case inputsql.trim().substr(0, 'CREATE'.length).toUpperCase() === 'CREATE':
       case inputsql.trim().substr(0, 'DROP'.length).toUpperCase() === 'DROP':

@@ -11,8 +11,10 @@ describe('Simulate raw postgres client', () => {
   test(
     'create table, insert and retrieve a record',
     async () => {
+      const randomId = Math.random().toString(36).substr(2, 9);
       const client = new lib.Client(dbUrl);
       const options = client.dataApiClient.raw.postgresDataApiClientConfig();
+
       if (!process.env.CI) {
         console.log(options);
       }
@@ -21,6 +23,10 @@ describe('Simulate raw postgres client', () => {
         ...(options as any),
         dialect: 'postgres',
         dialectModule: lib,
+        dialectOptions: {
+          statement_timeout: 2000,
+          query_timeout: 2000,
+        },
       });
 
       await sequelize.authenticate();
@@ -48,14 +54,15 @@ describe('Simulate raw postgres client', () => {
           },
         },
         {
-          tableName: 'users',
+          tableName: 'users.' + randomId,
+          freezeTableName: true,
           sequelize, // passing the `sequelize` instance is required
         },
       );
 
-      await sequelize.sync({ alter: true });
+      await sequelize.sync({ force: true });
 
-      await User.destroy({ truncate: true });
+      // await User.destroy({ truncate: true });
 
       const newUser = await User.create({
         name: 'Johnny',
@@ -68,6 +75,7 @@ describe('Simulate raw postgres client', () => {
       expect(foundUser.name).toBe('Johnny');
       expect(foundUser.id).toBeGreaterThan(0);
 
+      await sequelize.drop();
       await sequelize.close();
     },
     15 * 1000,

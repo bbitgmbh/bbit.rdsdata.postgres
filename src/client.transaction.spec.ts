@@ -11,8 +11,10 @@ describe('Simulate raw postgres client', () => {
   test(
     'create table, insert and retrieve a record',
     async () => {
+      const randomId = Math.random().toString(36).substr(2, 9);
       const client = new lib.Client(dbUrl);
       const options = client.dataApiClient.raw.postgresDataApiClientConfig();
+      options.query_timeout = 5000;
       if (!process.env.CI) {
         console.log(options);
       }
@@ -21,6 +23,10 @@ describe('Simulate raw postgres client', () => {
         ...(options as any),
         dialect: 'postgres',
         dialectModule: lib,
+        dialectOptions: {
+          statement_timeout: 2000,
+          query_timeout: 2000,
+        },
       });
 
       await sequelize.authenticate();
@@ -48,14 +54,15 @@ describe('Simulate raw postgres client', () => {
           },
         },
         {
-          tableName: 'contacts',
+          tableName: 'contacts.' + randomId,
+          freezeTableName: true,
           sequelize, // passing the `sequelize` instance is required
         },
       );
 
-      await sequelize.sync({ alter: true });
+      await sequelize.sync({ force: true });
 
-      await Contact.destroy({ truncate: true });
+      // await Contact.destroy({ truncate: true });
 
       // First, we start a transaction and save it into a variable
       try {
@@ -115,9 +122,12 @@ describe('Simulate raw postgres client', () => {
       const foundUser = await Contact.findOne({ where: { firstName: 'Homer' } });
       console.log(foundUser);
 
+      // ToDo: why does this block the execution when transactions are used: await sequelize.drop();
+      console.log('closing connection');
+
       await sequelize.close();
       expect(true).toBeTruthy();
     },
-    80 * 1000,
+    15 * 1000,
   );
 });

@@ -18,7 +18,8 @@
   },
   "scripts": {
     "clean": "rimraf coverage dist junit.xml",
-    "test": "jest --runInBand",
+    "test": "jest",
+    "jest": "jest",
     "lint": "eslint \"src/**/*.ts\"",
     "types": "tsc --emitDeclarationOnly",
     "tsc": "tsc --project tsconfig.build.json",

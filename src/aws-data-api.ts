@@ -1,5 +1,5 @@
 import * as AWS from 'aws-sdk';
-import { SqlParametersList, SqlRecords } from 'aws-sdk/clients/rdsdataservice';
+import { SqlParametersList, SqlRecords, Field } from 'aws-sdk/clients/rdsdataservice';
 import { ClientConfig } from 'pg';
 import * as sqlString from 'sqlstring';
 import { AwsDataRawApi } from './aws-data-raw-api';
@@ -171,7 +171,7 @@ export class AwsDataApi {
   }
 
   // Hint to specify the underlying object type for data type mapping
-  static getTypeHint(val) {
+  static getTypeHint(val: unknown) {
     return AwsDataApiUtils.isDate(val) ? 'TIMESTAMP' : undefined;
   }
 
@@ -218,12 +218,12 @@ export class AwsDataApi {
       columns.filter((c) => c.label.includes('_')).forEach((c) => (c.label = AwsDataApiUtils.snakeToCamel(c.label)));
     }
 
-    const fieldMap: { label: string; typeName: string; fieldKey: string }[] =
+    const fieldMap: { label: string; typeName: string }[] =
       recs && recs[0]
-        ? recs[0].map<{ label: string; typeName: string; fieldKey: string }>((x, i) => ({
+        ? recs[0].map<{ label: string; typeName: string }>((_x, i) => ({
             label: columns && columns.length ? columns[i].label : 'col' + i,
             typeName: columns && columns.length ? columns[i].typeName : undefined,
-            fieldKey: Object.keys(x).filter((type) => type !== 'isNull' && x[type] !== undefined && x[type] !== null)[0],
+            // fieldKey: Object.keys(x).filter((type) => type !== 'isNull' && x[type] !== undefined && x[type] !== null)[0],
           }))
         : [];
 
@@ -239,7 +239,7 @@ export class AwsDataApi {
                 : acc.concat(null);
             }
 
-            const value = AwsDataApi.deserializeRecordValue(field[fieldMap[i].fieldKey], fieldMap[i], params);
+            const value = AwsDataApi.deserializeRecordField(field, fieldMap[i], params);
 
             return params.hydrateColumnNames // object if hydrate, else array
               ? Object.assign(acc, { [fieldMap[i].label]: value })
@@ -250,13 +250,13 @@ export class AwsDataApi {
   }
 
   // Format record value based on its value, the database column's typeName and the formatting options
-  static deserializeRecordValue(value: any, field: { label: string; typeName: string; fieldKey: string }, params: IAwsDataApiQueryParams) {
-    if (field.fieldKey === 'arrayValue') {
-      const arrayFieldName = Object.keys(value).filter((type) => type !== 'isNull' && !!value[type])[0];
-
-      const arrValue = value[arrayFieldName].map((e: any) =>
-        AwsDataApi.deserializeRecordValue(e, { ...field, fieldKey: arrayFieldName }, params),
+  static deserializeRecordField(value: Field, field: { label: string; typeName: string }, params: IAwsDataApiQueryParams) {
+    if (value.arrayValue) {
+      const arrayFieldKey = Object.keys(value.arrayValue).find(
+        (type) => type !== 'isNull' && value.arrayValue[type] !== undefined && value.arrayValue[type] !== null,
       );
+
+      const arrValue = value.arrayValue[arrayFieldKey].map((e: any) => AwsDataApi.deserializeRecordValue(e, field, params));
       if (params?.formatOptions?.stringifyArrays) {
         return JSON.stringify(arrValue);
       }
@@ -264,6 +264,12 @@ export class AwsDataApi {
       return arrValue;
     }
 
+    const fieldKey = Object.keys(value).find((type) => type !== 'isNull' && value[type] !== undefined && value[type] !== null);
+
+    return AwsDataApi.deserializeRecordValue(value[fieldKey], field, params);
+  }
+
+  static deserializeRecordValue(value: any, field: { label: string; typeName: string }, params: IAwsDataApiQueryParams) {
     return params?.formatOptions?.deserializeDate && ['DATE', 'DATETIME', 'TIMESTAMP', 'TIMESTAMP WITH TIME ZONE'].includes(field.typeName)
       ? AwsDataApi.formatFromTimeStamp(
           value,

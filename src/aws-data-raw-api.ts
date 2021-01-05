@@ -356,12 +356,12 @@ export class AwsDataRawApi {
 
     args.sql = theSql;
 
-    console.log('execute sql', args, additionalParams);
+    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args);
+
+    console.log('execute sql', args, additionalParams, params);
 
     return new Promise((resolve, reject) => {
-      const sqlReq = this._rds.executeStatement(
-        AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
-      );
+      const sqlReq = this._rds.executeStatement(params);
 
       const timeoutInMS = additionalParams?.queryTimeoutInMS || this.queryTimeoutInMS;
       let isAborted = false;
@@ -430,10 +430,9 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
+    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args);
     console.log('commit transaction', args);
-    return this._rds
-      .commitTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args))
-      .promise();
+    return this._rds.commitTransaction(params).promise();
   }
 
   rollbackTransaction(args: {
@@ -442,9 +441,9 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
+    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args);
+
     console.log('rollback transaction', args);
-    return this._rds
-      .rollbackTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args))
-      .promise();
+    return this._rds.rollbackTransaction(params).promise();
   }
 }

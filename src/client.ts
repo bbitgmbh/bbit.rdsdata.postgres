@@ -17,12 +17,23 @@ export class Client extends EventEmitter {
       formatOptions: {
         stringifyArrays: true,
       },
+      sqlMonkeyPatchers: {
+        sequelizeListDbWithColumns: (sql) => {
+          if (/array_agg\(a.attname\) AS column_names.*from.*pg_attribute a/i.test(sql)) {
+            // prevents https://github.com/bbitgmbh/bbit.rdsdata.postgres/issues/5
+            console.info('monkey patching sequelize list db with columsn sql', sql);
+            return sql.replace(/array_agg\(a.attname\) AS column_names/gi, 'array_agg(cast(a.attname as varchar(512))) AS column_names');
+          }
+
+          return sql;
+        },
+      },
     });
   }
 
   connect(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
-      this.dataApiClient.raw.checkDbState();
+      await this.dataApiClient.raw.checkDbState({ awaitStartup: true });
     };
 
     if (callback) {

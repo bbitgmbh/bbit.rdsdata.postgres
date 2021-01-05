@@ -14,6 +14,7 @@ export class AwsDataRawApi {
   public readonly schema: string;
   public readonly queryTimeoutInMS: number;
   public readonly defaultAwaitStartup: boolean;
+  public readonly sqlMonkeyPatchers: { [key: string]: (sql: string) => string };
 
   private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
   private _rds: RDSDataService;
@@ -73,7 +74,7 @@ export class AwsDataRawApi {
   }
 
   static getDbUrlFromConfig(config: ClientConfig) {
-    const secret = AwsDataRawApi.splitSecretArn(config.password);
+    const secret = AwsDataRawApi.splitSecretArn(config.password as any);
     if (!secret) {
       throw new Error('invalid secret-arn');
     }
@@ -97,6 +98,7 @@ export class AwsDataRawApi {
     this.schema = additionalConfig?.schema;
     this.queryTimeoutInMS = additionalConfig?.queryTimeoutInMS;
     this.defaultAwaitStartup = !!additionalConfig?.awaitStartup;
+    this.sqlMonkeyPatchers = additionalConfig?.sqlMonkeyPatchers || {};
 
     const awsrdsUrl = AwsDataApiUtils.isString(config) ? config : AwsDataRawApi.getDbUrlFromConfig(config);
 
@@ -343,6 +345,17 @@ export class AwsDataRawApi {
       await this.checkDbState();
     }
 
+    let theSql = args.sql;
+
+    for (const patch in this.sqlMonkeyPatchers) {
+      const patchRes = this.sqlMonkeyPatchers[patch](theSql);
+      if (patchRes) {
+        theSql = patchRes;
+      }
+    }
+
+    args.sql = theSql;
+
     return new Promise((resolve, reject) => {
       const sqlReq = this._rds.executeStatement(
         AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
@@ -374,6 +387,12 @@ export class AwsDataRawApi {
         }
 
         if (err) {
+          if (err.code === 'BadRequestException' && err.message === "Array of type 'name' is not supported") {
+            (err as any).hint =
+              'AWS Data API does not support name datatype, please rewrite your SQL to cast the output to varchar(255). Example: cast(pg_attribute.attname as varchar(255))';
+            console.warn((err as any).hint);
+          }
+
           return reject(err);
         }
 

@@ -6,6 +6,7 @@ export interface IAwsDataRawApiConfig {
   client?: AWS.RDSDataService;
   queryTimeoutInMS?: number;
   awaitStartup?: boolean;
+  sqlMonkeyPatchers?: { [key: string]: (sql: string) => string };
 }
 
 export interface IAwsDataApiQueryParams extends IAwsDataRawApiConfig {

@@ -19,7 +19,7 @@ The goal of this project is to provide a node-postgres compatible client that co
 
 ## How to use - Examples
 
-see test files under src/*.spec.ts
+NOTE: see test files under src/*.spec.ts for more examples.
 
 ### Install with aws-sdk
 
@@ -136,12 +136,23 @@ While postgres is supporting chars like double point, it looks like AWS RDS Data
 ### Asynchronous notification will not work
 Due to the request/response nature of the http protocol asynchronous database notifications can not be transmitted back to the client.
 
+### Postgres special Datatypes like Name, Geometry, UUID, etc. are not supported
+Workaround: Cast them in your sql statement to something else, for instance a varchar(255). Example:
+
+```
+-- following statements selects all tables with their column names
+-- field attname of table pg_class as has name datatype, therefore we cast this with cast(a.attname as varchar(512)) to a string
+
+SELECT i.relname AS tablename, array_agg(cast(a.attname as varchar(512))) AS column_names 
+	FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r'
+GROUP BY i.relname ORDER BY i.relname
+```
+
 
 ## Performance
 * Reuse HTTP-Connections with keep-alive
   * Either set environment variable AWS_NODEJS_CONNECTION_REUSE_ENABLED = 1
   * or inject your preprepared HTTP client in AWS-SDK, for details see: https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/node-reusing-connections.html
-
 
 ## How to setup AWS RDS Data API
 See https://github.com/jeremydaly/data-api-client#enabling-data-api

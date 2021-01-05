@@ -377,35 +377,29 @@ export class AwsDataApi {
       case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
       case inputsql.trim().substr(0, 'START TRANSACTION'.length).toUpperCase() === 'START TRANSACTION':
         const beginRes = await this.raw.beginTransaction(AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']));
-        console.log('started transaction. id: ', beginRes.transactionId);
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
       case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
-        const commitRes = {
-          transactionId: this._config.transactionId,
-          transactionStatus: (
-            await this.raw.commitTransaction({
-              ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
-              transactionId: this._config.transactionId,
-            })
-          ).transactionStatus,
-        };
-        this._config.transactionId = null;
-        return commitRes;
-
       case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
-        const rollbackRes = {
-          transactionId: this._config.transactionId,
-          transactionStatus: (
-            await this.raw.rollbackTransaction({
-              ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
-              transactionId: this._config.transactionId,
-            })
-          ).transactionStatus,
-        };
+        const currentTransactionId = this._config.transactionId;
+
+        const func =
+          inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT' ? this.raw.commitTransaction : this.raw.rollbackTransaction;
+
         this._config.transactionId = null;
-        return rollbackRes;
+
+        const commitRes = await func({
+          ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
+          transactionId: currentTransactionId,
+        });
+
+        // this is not executed: WHY????? console.log(this._config, currentTransactionId);
+
+        return {
+          transactionId: currentTransactionId,
+          transactionStatus: commitRes.transactionStatus,
+        };
 
       case inputsql.trim().substr(0, 'CREATE'.length).toUpperCase() === 'CREATE':
       case inputsql.trim().substr(0, 'DROP'.length).toUpperCase() === 'DROP':

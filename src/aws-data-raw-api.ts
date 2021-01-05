@@ -426,7 +426,7 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
-    console.log('commit transaction');
+    console.log('commit transaction', args);
     return this._rds
       .commitTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args))
       .promise();
@@ -438,7 +438,7 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
-    console.log('rollback transaction');
+    console.log('rollback transaction', args);
     return this._rds
       .rollbackTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args))
       .promise();

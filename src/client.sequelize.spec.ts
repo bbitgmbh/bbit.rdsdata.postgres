@@ -55,6 +55,8 @@ describe('Simulate raw postgres client', () => {
 
       await sequelize.sync({ alter: true });
 
+      await User.destroy({ truncate: true });
+
       const newUser = await User.create({
         name: 'Johnny',
         age: 30,

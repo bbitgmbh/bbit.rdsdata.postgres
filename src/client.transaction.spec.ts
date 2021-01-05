@@ -55,6 +55,8 @@ describe('Simulate raw postgres client', () => {
 
       await sequelize.sync({ alter: true });
 
+      await Contact.destroy({ truncate: true });
+
       // First, we start a transaction and save it into a variable
       try {
         const result = await sequelize.transaction(async (t) => {
@@ -116,6 +118,6 @@ describe('Simulate raw postgres client', () => {
       await sequelize.close();
       expect(true).toBeTruthy();
     },
-    30 * 1000,
+    80 * 1000,
   );
 });

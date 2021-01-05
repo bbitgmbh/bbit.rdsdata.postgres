@@ -397,6 +397,10 @@ export class AwsDataRawApi {
             }
 
             if (err.message === 'ERROR: current transaction is aborted, commands ignored until end of transaction block') {
+              (err as any).hint =
+                'there is an unclosed transaction. automatically executing ROLLBACK, otherwise further statements are blocked';
+              console.warn((err as any).hint);
+
               // recover from stale transactions
               this.executeStatement({ ...args, sql: 'ROLLBACK' }).then(
                 () => reject(err),

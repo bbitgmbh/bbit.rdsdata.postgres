@@ -292,17 +292,17 @@ export class AwsDataRawApi {
       .promise();
   }
 
-  beginTransaction(args?: {
+  async beginTransaction(args?: {
     /**
      * The name of the database schema.
      */
     schema?: DbName;
   }) {
-    return this._rds
-      .beginTransaction(
-        AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args || {}),
-      )
-      .promise();
+    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args || {});
+
+    const res = await this._rds.beginTransaction(params).promise();
+    console.log('started transaction', params, { id: res.transactionId });
+    return res;
   }
 
   async executeStatement(
@@ -356,6 +356,8 @@ export class AwsDataRawApi {
 
     args.sql = theSql;
 
+    console.log('execute sql', args);
+
     return new Promise((resolve, reject) => {
       const sqlReq = this._rds.executeStatement(
         AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
@@ -387,10 +389,24 @@ export class AwsDataRawApi {
         }
 
         if (err) {
-          if (err.code === 'BadRequestException' && err.message === "Array of type 'name' is not supported") {
-            (err as any).hint =
-              'AWS Data API does not support name datatype, please rewrite your SQL to cast the output to varchar(255). Example: cast(pg_attribute.attname as varchar(255))';
-            console.warn((err as any).hint);
+          if (err.code === 'BadRequestException') {
+            if (err.message === "Array of type 'name' is not supported") {
+              (err as any).hint =
+                'AWS Data API does not support name datatype, please rewrite your SQL to cast the output to varchar(255). Example: cast(pg_attribute.attname as varchar(255))';
+              console.warn((err as any).hint);
+            }
+
+            if (err.message === 'ERROR: current transaction is aborted, commands ignored until end of transaction block') {
+              // recover from stale transactions
+              this.executeStatement({ ...args, sql: 'ROLLBACK' }).then(
+                () => reject(err),
+                (error) => {
+                  console.error('rollback error', error);
+                  reject(err);
+                },
+              );
+              return;
+            }
           }
 
           return reject(err);
@@ -410,8 +426,9 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
+    console.log('commit transaction');
     return this._rds
-      .commitTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn']), args))
+      .commitTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args))
       .promise();
   }
 
@@ -421,8 +438,9 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
+    console.log('rollback transaction');
     return this._rds
-      .rollbackTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn']), args))
+      .rollbackTransaction(AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args))
       .promise();
   }
 }

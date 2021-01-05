@@ -9,7 +9,7 @@ The goal of this project is to provide a node-postgres compatible client that co
 * node-postgres compatible client with
   * Support for named parameters with double point sign
   * Support for positional parameters with dollar sign
-  * Support for transactions
+  * Support for transactions (EXPERIMENTAL)
   * Support for postgres array datatype
 * TypeScript support
 * General RDS Data API Client with
@@ -18,6 +18,8 @@ The goal of this project is to provide a node-postgres compatible client that co
   * promisified interfaces
 
 ## How to use - Examples
+
+see test files under src/*.spec.ts
 
 ### Install with aws-sdk
 

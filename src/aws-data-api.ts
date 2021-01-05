@@ -375,14 +375,21 @@ export class AwsDataApi {
     // Transactional overwrites
     switch (true) {
       case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
-        const beginRes = await this.raw.beginTransaction();
+      case inputsql.trim().substr(0, 'START TRANSACTION'.length).toUpperCase() === 'START TRANSACTION':
+        const beginRes = await this.raw.beginTransaction(AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']));
+        console.log('started transaction. id: ', beginRes.transactionId);
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
       case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
         const commitRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this.raw.commitTransaction({ transactionId: this._config.transactionId })).transactionStatus,
+          transactionStatus: (
+            await this.raw.commitTransaction({
+              ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
+              transactionId: this._config.transactionId,
+            })
+          ).transactionStatus,
         };
         this._config.transactionId = null;
         return commitRes;
@@ -390,7 +397,12 @@ export class AwsDataApi {
       case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const rollbackRes = {
           transactionId: this._config.transactionId,
-          transactionStatus: (await this.raw.rollbackTransaction({ transactionId: this._config.transactionId })).transactionStatus,
+          transactionStatus: (
+            await this.raw.rollbackTransaction({
+              ...AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']),
+              transactionId: this._config.transactionId,
+            })
+          ).transactionStatus,
         };
         this._config.transactionId = null;
         return rollbackRes;

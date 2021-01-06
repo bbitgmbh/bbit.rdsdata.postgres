@@ -16,7 +16,7 @@ The goal of this project is to provide a node-postgres compatible client that co
   * automatic SQL and parameters preparation to AWS format
   * automatic response parsing from AWS format
   * promisified interfaces
-  * configurable maximum concurrent sql statements, defaults to 1
+  * configurable maximum concurrent sql statements, defaults to 1 per client instance
 
 ## How to use - Examples
 

@@ -29,7 +29,7 @@ export class AwsDataApi {
   async query(inputsql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
-      { database: this.raw.databaseName, schema: this.raw.schema },
+      { database: this.raw.database, schema: this.raw.schema },
       AwsDataApiUtils.pick(this._config, ['hydrateColumnNames', 'formatOptions', 'schema', 'convertSnakeToCamel']),
       queryParams || {},
     );

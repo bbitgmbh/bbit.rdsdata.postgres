@@ -11,7 +11,7 @@ export class AwsDataRawApi {
   public readonly secretArn: string;
   public readonly resourceArn: string;
   public readonly clusterIdentifier: string;
-  public readonly databaseName: string;
+  public readonly database: string; // must match executeStatment
   public readonly region: string;
   public readonly schema: string;
   public readonly queryTimeoutInMS: number;
@@ -124,7 +124,7 @@ export class AwsDataRawApi {
 
     this.region = region;
     this.clusterIdentifier = decodeURIComponent(url.pathname.replace(/^\//, ''));
-    this.databaseName = decodeURIComponent(url.username);
+    this.database = decodeURIComponent(url.username);
     this.secretArn = `arn:aws:secretsmanager:${region}:${account}:secret:${secret}`;
     this.resourceArn = `arn:aws:rds:${region}:${account}:cluster:${this.clusterIdentifier}`;
 
@@ -143,17 +143,17 @@ export class AwsDataRawApi {
       }
     }
 
-    if (!AwsDataApiUtils.isString(this.resourceArn)) {
-      throw new Error("'resourceArn' string value required");
+    if (!AwsDataApiUtils.isString(this.resourceArn) || !(this.resourceArn.length > 0)) {
+      throw new AwsDataError('invalid-database-config', { reason: "non empty 'resourceArn' string value required" });
     }
 
-    if (this.databaseName !== undefined && !AwsDataApiUtils.isString(this.databaseName)) {
-      throw new Error("'database' string value required");
+    if (!AwsDataApiUtils.isString(this.database) || !(this.database.length > 0)) {
+      throw new AwsDataError('invalid-database-config', { reason: "non empty 'database' string value required" });
     }
 
     // temporary error since AWS seems to have trouble with those
-    if (/[:@]/gi.test(this.databaseName)) {
-      throw new Error("'database' name may not contain url special chars");
+    if (/[:@]/gi.test(this.database)) {
+      throw new AwsDataError('invalid-database-config', { reason: "'database' name may not contain url special chars" });
     }
 
     if (additionalConfig?.client) {
@@ -233,7 +233,7 @@ export class AwsDataRawApi {
       password: this.secretArn,
       host: this.clusterIdentifier,
       port: 443,
-      database: this.databaseName,
+      database: this.database,
     } as any;
   }
 
@@ -262,7 +262,7 @@ export class AwsDataRawApi {
       password: values.password,
       host: values.host,
       port: values.port,
-      database: this.databaseName,
+      database: this.database,
       awsDbInstanceIdentifier: values.dbInstanceIdentifier,
       awsEngine: values.engine,
       awsResourceId: values.resourceId,
@@ -309,6 +309,30 @@ export class AwsDataRawApi {
         AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']),
         args || {},
       );
+
+      const checks = [
+        !(params.resourceArn?.length > 0) ? 'resourceArn' : null,
+        !(params.secretArn?.length > 0) ? 'secretArn' : null,
+        !(params.database?.length > 0) ? 'database' : null,
+      ].filter(Boolean);
+
+      if (checks.length > 0) {
+        return Promise.reject(
+          new AwsDataError('invalid-sql-begin-transaction-params', {
+            reason: checks + ' is missing',
+            params,
+            defaults: {
+              secretArn: this.secretArn,
+              resourceArn: this.resourceArn,
+              clusterIdentifier: this.clusterIdentifier,
+              database: this.database,
+              region: this.region,
+              schema: this.schema,
+              queryTimeoutInMS: this.queryTimeoutInMS,
+            },
+          }),
+        );
+      }
 
       const res = await this._rds.beginTransaction(params).promise();
       console.log('started transaction', params, { id: res.transactionId });
@@ -369,6 +393,30 @@ export class AwsDataRawApi {
       args.sql = theSql;
 
       const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args);
+
+      const checks = [
+        !(params.resourceArn?.length > 0) ? 'resourceArn' : null,
+        !(params.secretArn?.length > 0) ? 'secretArn' : null,
+        !(params.database?.length > 0) ? 'database' : null,
+      ].filter(Boolean);
+
+      if (checks.length > 0) {
+        return Promise.reject(
+          new AwsDataError('invalid-sql-execute-params', {
+            reason: checks + ' is missing',
+            params,
+            defaults: {
+              secretArn: this.secretArn,
+              resourceArn: this.resourceArn,
+              clusterIdentifier: this.clusterIdentifier,
+              database: this.database,
+              region: this.region,
+              schema: this.schema,
+              queryTimeoutInMS: this.queryTimeoutInMS,
+            },
+          }),
+        );
+      }
 
       // console.log('execute sql', args, additionalParams, params);
 

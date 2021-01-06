@@ -4,6 +4,8 @@ import { AwsDataApiUtils, UnixEpochTimestamp } from './utils';
 import { DbName, Id, ResultSetOptions, SqlParameterSets, SqlParametersList, SqlStatement } from 'aws-sdk/clients/rdsdataservice';
 import { DBCluster } from 'aws-sdk/clients/rds';
 import { IAwsDataRawApiConfig } from './interfaces';
+import { Semaphore } from './semaphore';
+import { AwsDataError } from './aws-data-error';
 
 export class AwsDataRawApi {
   public readonly secretArn: string;
@@ -17,6 +19,7 @@ export class AwsDataRawApi {
   public readonly sqlMonkeyPatchers: { [key: string]: (sql: string) => string };
 
   private readonly _dbState: { isRunning: boolean; lastCheck: UnixEpochTimestamp } = { isRunning: false, lastCheck: null };
+  private _semaphore: Semaphore;
   private _rds: RDSDataService;
   private _clusterInfo: DBCluster;
 
@@ -99,6 +102,7 @@ export class AwsDataRawApi {
     this.queryTimeoutInMS = additionalConfig?.queryTimeoutInMS;
     this.defaultAwaitStartup = !!additionalConfig?.awaitStartup;
     this.sqlMonkeyPatchers = additionalConfig?.sqlMonkeyPatchers || {};
+    this._semaphore = new Semaphore({ maxConcurrency: additionalConfig?.maxConcurrency || 1 });
 
     const awsrdsUrl = AwsDataApiUtils.isString(config) ? config : AwsDataRawApi.getDbUrlFromConfig(config);
 
@@ -285,11 +289,13 @@ export class AwsDataRawApi {
      */
     transactionId?: Id;
   }) {
-    return this._rds
-      .batchExecuteStatement(
-        AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
-      )
-      .promise();
+    return this._semaphore.runExclusive(() => {
+      return this._rds
+        .batchExecuteStatement(
+          AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args),
+        )
+        .promise();
+    });
   }
 
   async beginTransaction(args?: {
@@ -298,11 +304,16 @@ export class AwsDataRawApi {
      */
     schema?: DbName;
   }) {
-    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args || {});
+    return this._semaphore.runExclusive(async () => {
+      const params = AwsDataApiUtils.mergeConfig(
+        AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']),
+        args || {},
+      );
 
-    const res = await this._rds.beginTransaction(params).promise();
-    console.log('started transaction', params, { id: res.transactionId });
-    return res;
+      const res = await this._rds.beginTransaction(params).promise();
+      console.log('started transaction', params, { id: res.transactionId });
+      return res;
+    });
   }
 
   async executeStatement(
@@ -345,83 +356,92 @@ export class AwsDataRawApi {
       await this.checkDbState();
     }
 
-    let theSql = args.sql;
+    const runRes = await this._semaphore.runExclusive(() => {
+      let theSql = args.sql;
 
-    for (const patch in this.sqlMonkeyPatchers) {
-      const patchRes = this.sqlMonkeyPatchers[patch](theSql);
-      if (patchRes) {
-        theSql = patchRes;
+      for (const patch in this.sqlMonkeyPatchers) {
+        const patchRes = this.sqlMonkeyPatchers[patch](theSql);
+        if (patchRes) {
+          theSql = patchRes;
+        }
       }
-    }
 
-    args.sql = theSql;
+      args.sql = theSql;
 
-    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args);
+      const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database', 'schema']), args);
 
-    console.log('execute sql', args, additionalParams, params);
+      // console.log('execute sql', args, additionalParams, params);
 
-    return new Promise((resolve, reject) => {
-      const sqlReq = this._rds.executeStatement(params);
+      return new Promise((resolve, reject) => {
+        const sqlReq = this._rds.executeStatement(params);
 
-      const timeoutInMS = additionalParams?.queryTimeoutInMS || this.queryTimeoutInMS;
-      let isAborted = false;
-      let timeoutRef =
-        timeoutInMS > 0
-          ? setTimeout(() => {
-              isAborted = true;
-              timeoutRef = null;
-              sqlReq.abort();
-              reject(
-                new Error(
-                  (this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting') + ' ' + JSON.stringify({ timeoutInMS }),
-                ),
-              );
-            }, timeoutInMS)
-          : null;
+        const timeoutInMS = additionalParams?.queryTimeoutInMS || this.queryTimeoutInMS;
+        let isResolved = false;
+        let timeoutRef =
+          timeoutInMS > 0
+            ? setTimeout(() => {
+                try {
+                  sqlReq.abort();
+                } finally {
+                  timeoutRef = null;
+                  isResolved = true;
+                  reject(new AwsDataError(this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting', { timeoutInMS }));
+                }
+              }, timeoutInMS)
+            : null;
 
-      sqlReq.send((err, data) => {
-        if (timeoutRef) {
-          clearTimeout(timeoutRef);
-        }
-
-        if (isAborted) {
-          return;
-        }
-
-        if (err) {
-          if (err.code === 'BadRequestException') {
-            if (err.message === "Array of type 'name' is not supported") {
-              (err as any).hint =
-                'AWS Data API does not support name datatype, please rewrite your SQL to cast the output to varchar(255). Example: cast(pg_attribute.attname as varchar(255))';
-              console.warn((err as any).hint);
-            }
-
-            if (err.message === 'ERROR: current transaction is aborted, commands ignored until end of transaction block') {
-              (err as any).hint =
-                'there is an unclosed transaction. automatically executing ROLLBACK, otherwise further statements are blocked';
-              console.warn((err as any).hint);
-
-              // recover from stale transactions
-              this.executeStatement({ ...args, sql: 'ROLLBACK' }).then(
-                () => reject(err),
-                (error) => {
-                  console.error('rollback error', error);
-                  reject(err);
-                },
-              );
-              return;
-            }
+        sqlReq.send((err, data) => {
+          if (timeoutRef) {
+            clearTimeout(timeoutRef);
           }
 
-          return reject(err);
-        }
+          if (isResolved) {
+            return;
+          }
 
-        this._dbState.isRunning = true;
-        this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+          if (err) {
+            if (err.code === 'BadRequestException') {
+              if (err.message === "Array of type 'name' is not supported") {
+                (err as any).hint =
+                  'AWS Data API does not support name datatype, please rewrite your SQL to cast the output to varchar(255). Example: cast(pg_attribute.attname as varchar(255))';
+                console.warn((err as any).hint);
+              }
 
-        return resolve(data);
+              if (err.message === 'ERROR: current transaction is aborted, commands ignored until end of transaction block') {
+                (err as any).hint =
+                  'there is an unclosed transaction. automatically executing ROLLBACK, otherwise further statements are blocked';
+                console.warn((err as any).hint);
+
+                // recover from stale transactions
+                this.executeStatement({ ...args, sql: 'ROLLBACK' }).then(
+                  () => {
+                    isResolved = true;
+                    return reject(err);
+                  },
+                  (error) => {
+                    console.error('rollback error', error);
+                    isResolved = true;
+                    return reject(err);
+                  },
+                );
+                return;
+              }
+            }
+
+            isResolved = true;
+            return reject(err);
+          }
+
+          this._dbState.isRunning = true;
+          this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+
+          isResolved = true;
+          return resolve(data);
+        });
       });
     });
+
+    return runRes;
   }
 
   commitTransaction(args: {
@@ -430,9 +450,11 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
-    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args);
-    console.log('commit transaction', args);
-    return this._rds.commitTransaction(params).promise();
+    return this._semaphore.runExclusive(() => {
+      const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn']), args);
+      console.log('commit transaction', args);
+      return this._rds.commitTransaction(params).promise();
+    });
   }
 
   rollbackTransaction(args: {
@@ -441,9 +463,15 @@ export class AwsDataRawApi {
      */
     transactionId: Id;
   }) {
-    const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn', 'database']), args);
+    return this._semaphore.runExclusive(() => {
+      const params = AwsDataApiUtils.mergeConfig(AwsDataApiUtils.pick(this, ['resourceArn', 'secretArn']), args);
 
-    console.log('rollback transaction', args);
-    return this._rds.rollbackTransaction(params).promise();
+      console.log('rollback transaction', args);
+      return this._rds.rollbackTransaction(params).promise();
+    });
+  }
+
+  awaitCompleteOfAllPendingStatemets() {
+    return this._semaphore.awaitFree();
   }
 }

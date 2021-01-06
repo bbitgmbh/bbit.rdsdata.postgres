@@ -1,13 +1,15 @@
 import * as lib from './index';
 import { Sequelize, Model, DataTypes } from 'sequelize';
+import * as AWS from 'aws-sdk';
 
 const dbUrl = process.env.AURORA_TEST_DB_URL;
 
 if (!process.env.CI) {
   console.log(dbUrl);
+  AWS.config.logger = console;
 }
 
-describe('Simulate raw postgres client', () => {
+describe('Simulate transaction', () => {
   test(
     'create table, insert and retrieve a record',
     async () => {
@@ -122,12 +124,13 @@ describe('Simulate raw postgres client', () => {
       const foundUser = await Contact.findOne({ where: { firstName: 'Homer' } });
       console.log(foundUser);
 
-      // ToDo: why does this block the execution when transactions are used: await sequelize.drop();
-      console.log('closing connection');
+      await sequelize.query('commit');
+
+      await sequelize.drop();
 
       await sequelize.close();
       expect(true).toBeTruthy();
     },
-    15 * 1000,
+    30 * 1000,
   );
 });

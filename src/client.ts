@@ -121,7 +121,7 @@ export class Client extends EventEmitter {
 
   end(callback?: (err: Error) => void): Promise<void> {
     const promise = async (): Promise<void> => {
-      this.dataApiClient.clearQueue();
+      await this.dataApiClient.raw.awaitCompleteOfAllPendingStatemets();
     };
 
     if (callback) {

@@ -9,13 +9,14 @@ The goal of this project is to provide a node-postgres compatible client that co
 * node-postgres compatible client with
   * Support for named parameters with double point sign
   * Support for positional parameters with dollar sign
-  * Support for transactions (EXPERIMENTAL)
+  * Support for transactions
   * Support for postgres array datatype
 * TypeScript support
 * General RDS Data API Client with
   * automatic SQL and parameters preparation to AWS format
   * automatic response parsing from AWS format
   * promisified interfaces
+  * configurable maximum concurrent sql statements, defaults to 1
 
 ## How to use - Examples
 
@@ -136,7 +137,7 @@ While postgres is supporting chars like double point, it looks like AWS RDS Data
 ### Asynchronous notification will not work
 Due to the request/response nature of the http protocol asynchronous database notifications can not be transmitted back to the client.
 
-### Postgres special Datatypes like Name, Geometry, UUID, etc. are not supported
+### Postgres special datatypes like Name, Geometry, UUID, etc. are not supported
 Workaround: Cast them in your sql statement to something else, for instance a varchar(255). Example:
 
 ```
@@ -150,6 +151,8 @@ GROUP BY i.relname ORDER BY i.relname
 
 
 ## Performance
+some manual comparisons showed that executing statements over Data API has little overhead (middle two digit millisecs).
+### Tips
 * Reuse HTTP-Connections with keep-alive
   * Either set environment variable AWS_NODEJS_CONNECTION_REUSE_ENABLED = 1
   * or inject your preprepared HTTP client in AWS-SDK, for details see: https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/node-reusing-connections.html

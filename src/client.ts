@@ -16,6 +16,7 @@ export class Client extends EventEmitter {
     this.dataApiClient = new AwsDataApi(config, {
       formatOptions: {
         stringifyArrays: true,
+        deserializeDate: true, // for test
       },
       sqlMonkeyPatchers: {
         sequelizeListDbWithColumns: (sql) => {

@@ -28,11 +28,14 @@
     "bbitprecommit": "run-p lint test build"
   },
   "dependencies": {
+    "@types/luxon": "^1.25.1",
+    "luxon": "^1.25.0",
     "pg-types": "^3.0.1",
     "sqlstring": "^2.3.2"
   },
   "peerDependencies": {
-    "aws-sdk": "^2.753.0"
+    "aws-sdk": "^2.821.0",
+    "luxon": "^1.25.0"
   },
   "devDependencies": {
     "@types/jest": "^26.0.19",

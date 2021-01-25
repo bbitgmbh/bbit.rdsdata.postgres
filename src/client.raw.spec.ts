@@ -11,7 +11,8 @@ describe('Simulate raw postgres client', () => {
     const client = new RawClient(dbUrl);
 
     await client.connect();
-    const res = await client.query('SELECT NOW() as message');
+    const res = await client.query('SELECT NOW() as message'); // ?
+    console.log('message res', res);
     expect(res.rows[0].message.length).toBeGreaterThan(0);
 
     await client.end();

@@ -5,8 +5,6 @@ if (!process.env.CI) {
   console.log('dbUrl', dbUrl);
 }
 
-// file.only
-
 describe('config tests', () => {
   test('get config test', async () => {
     const client = new AwsDataRawApi(dbUrl);

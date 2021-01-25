@@ -14,8 +14,8 @@ export interface IAwsDataApiQueryParams extends IAwsDataRawApiConfig {
   hydrateColumnNames?: boolean;
   maxConcurrentQueries?: number;
   formatOptions?: {
-    deserializeDate?: boolean;
-    treatAsLocalDate?: boolean;
+    datetimeConverstion?: 'keepSQLFormat' | 'convertToJsDate' | 'convertToIsoString';
+    treatAsTimeZone?: string; // local, utc, Europe/Zurich, etc.
     stringifyArrays?: boolean;
   };
   convertSnakeToCamel?: boolean;

@@ -4,6 +4,7 @@ import * as sqlString from 'sqlstring';
 import { AwsDataError } from './aws-data-error';
 import { IAwsDataApiQueryParams } from './interfaces';
 import { AwsDataApiUtils } from './utils';
+import { DateTime } from 'luxon';
 
 // Supported value types in the Data API
 const supportedTypes = ['arrayValue', 'blobValue', 'booleanValue', 'doubleValue', 'isNull', 'longValue', 'stringValue', 'structValue'];
@@ -23,7 +24,7 @@ export class AwsDataFormat {
   }
 
   // Prepare parameters
-  static processParams(sql: string, sqlParams, paramsToProcess, formatOptions, row = 0) {
+  static processParams(sql: string, sqlParams, paramsToProcess, formatOptions: IAwsDataApiQueryParams['formatOptions'], row = 0) {
     return {
       processedParams: paramsToProcess.reduce((acc, p) => {
         if (Array.isArray(p)) {
@@ -50,7 +51,7 @@ export class AwsDataFormat {
   }
 
   // Converts parameter to the name/value format
-  static formatParam(n, v, formatOptions) {
+  static formatParam(n, v, formatOptions: IAwsDataApiQueryParams['formatOptions']) {
     return AwsDataFormat.formatType(n, v, AwsDataFormat.getType(v), AwsDataFormat.getTypeHint(v), formatOptions);
   }
 
@@ -170,7 +171,7 @@ export class AwsDataFormat {
   }
 
   // Creates a standard Data API parameter using the supplied inputs
-  static formatType(name, value, type, typeHint, formatOptions) {
+  static formatType(name, value, type, typeHint, formatOptions: IAwsDataApiQueryParams['formatOptions']) {
     return Object.assign(
       typeHint != null ? { name, typeHint } : { name },
       type === null
@@ -181,7 +182,7 @@ export class AwsDataFormat {
                 type === 'isNull'
                   ? true
                   : AwsDataApiUtils.isDate(value)
-                  ? AwsDataFormat.formatToTimeStamp(value, formatOptions && formatOptions.treatAsLocalDate)
+                  ? AwsDataFormat.formatToTimeStamp(value, formatOptions.treatAsTimeZone)
                   : value,
             },
           },
@@ -190,17 +191,18 @@ export class AwsDataFormat {
 
   // Formats the (UTC) date to the AWS accepted YYYY-MM-DD HH:MM:SS[.FFF] format
   // See https://docs.aws.amazon.com/rdsdataservice/latest/APIReference/API_SqlParameter.html
-  static formatToTimeStamp(date: Date, treatAsLocalDate: boolean) {
+  static formatToTimeStamp(date: Date, treatAsTimeZone: string) {
+    // ToDo: does not work with sequelize: DateTime.fromJSDate(value).setZone(formatOptions.treatAsTimeZone || 'utc').toSQL({ includeZone: false })
     const pad = (val: number, num = 2) => '0'.repeat(num - (val + '').length) + val;
 
-    const year = treatAsLocalDate ? date.getFullYear() : date.getUTCFullYear();
-    const month = (treatAsLocalDate ? date.getMonth() : date.getUTCMonth()) + 1; // Convert to human month
-    const day = treatAsLocalDate ? date.getDate() : date.getUTCDate();
+    const year = treatAsTimeZone === 'local' ? date.getFullYear() : date.getUTCFullYear();
+    const month = (treatAsTimeZone === 'local' ? date.getMonth() : date.getUTCMonth()) + 1; // Convert to human month
+    const day = treatAsTimeZone === 'local' ? date.getDate() : date.getUTCDate();
 
-    const hours = treatAsLocalDate ? date.getHours() : date.getUTCHours();
-    const minutes = treatAsLocalDate ? date.getMinutes() : date.getUTCMinutes();
-    const seconds = treatAsLocalDate ? date.getSeconds() : date.getUTCSeconds();
-    const ms = treatAsLocalDate ? date.getMilliseconds() : date.getUTCMilliseconds();
+    const hours = treatAsTimeZone === 'local' ? date.getHours() : date.getUTCHours();
+    const minutes = treatAsTimeZone === 'local' ? date.getMinutes() : date.getUTCMinutes();
+    const seconds = treatAsTimeZone === 'local' ? date.getSeconds() : date.getUTCSeconds();
+    const ms = treatAsTimeZone === 'local' ? date.getMilliseconds() : date.getUTCMilliseconds();
 
     const fraction = ms <= 0 ? '' : `.${pad(ms, 3)}`;
 
@@ -264,19 +266,22 @@ export class AwsDataFormat {
   }
 
   static deserializeRecordValue(value: any, field: { label: string; typeName: string }, params: IAwsDataApiQueryParams) {
-    return params?.formatOptions?.deserializeDate && ['DATE', 'DATETIME', 'TIMESTAMP', 'TIMESTAMP WITH TIME ZONE'].includes(field.typeName)
-      ? AwsDataFormat.formatFromTimeStamp(
-          value,
-          (params.formatOptions && params.formatOptions.treatAsLocalDate) || field.typeName === 'TIMESTAMP WITH TIME ZONE',
-        )
-      : value;
-  }
+    const isDateField = ['date', 'datetime', 'timestamp', 'timestamptz'].includes(field.typeName.toLowerCase());
 
-  // Converts the string value to a Date object.
-  // If standard TIMESTAMP format (YYYY-MM-DD[ HH:MM:SS[.FFF]]) without TZ + treatAsLocalDate=false then assume UTC Date
-  // In all other cases convert value to datetime as-is (also values with TZ info)
-  static formatFromTimeStamp(value: string, treatAsLocalDate: boolean): Date {
-    return !treatAsLocalDate && /^\d{4}-\d{2}-\d{2}(\s\d{2}:\d{2}:\d{2}(\.\d{3})?)?$/.test(value) ? new Date(value + 'Z') : new Date(value);
+    if (isDateField) {
+      switch (params?.formatOptions?.datetimeConverstion || 'convertToIsoString') {
+        case 'convertToJsDate':
+          return DateTime.fromSQL(value, { zone: params?.formatOptions?.treatAsTimeZone || 'utc' }).toJSDate();
+
+        case 'convertToIsoString':
+          return DateTime.fromSQL(value, { zone: params?.formatOptions?.treatAsTimeZone || 'utc' }).toISO();
+
+        case 'keepSQLFormat':
+          return value;
+      }
+    }
+
+    return value;
   }
 
   // Format updateResults and extract insertIds

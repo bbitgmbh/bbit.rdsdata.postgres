@@ -22,10 +22,10 @@ The goal of this project is to provide a node-postgres compatible client that co
 
 NOTE: see test files under src/*.spec.ts for more examples.
 
-### Install with aws-sdk
+### Install with peer dependencies
 
 ```
-npm i @bbitgmbh/bbit.rdsdata.postgres aws-sdk --save
+npm i @bbitgmbh/bbit.rdsdata.postgres aws-sdk luxon --save
 ```
 
 

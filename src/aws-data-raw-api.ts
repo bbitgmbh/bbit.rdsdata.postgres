@@ -433,7 +433,13 @@ export class AwsDataRawApi {
                 } finally {
                   timeoutRef = null;
                   isResolved = true;
-                  reject(new AwsDataError(this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting', { timeoutInMS }));
+                  reject(
+                    new AwsDataError(this._dbState.isRunning ? 'sql-statement-timeout' : 'db-cluster-is-starting', {
+                      timeoutInMS,
+                      sql: params.sql,
+                      database: params.database,
+                    }),
+                  );
                 }
               }, timeoutInMS)
             : null;

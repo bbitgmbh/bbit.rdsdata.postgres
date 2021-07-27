@@ -26,7 +26,7 @@ export class AwsDataApi {
     this._config = AwsDataApiUtils.mergeConfig({ hydrateColumnNames: true }, additionalConfig);
   }
 
-  async query(inputsql: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
+  async query(inputSQL: string, values?: any, queryParams?: IAwsDataApiQueryParams): Promise<IAwsDataApiQueryResult> {
     // ToDo: validate formatOptions
     const cleanedParams = Object.assign(
       { database: this.raw.database, schema: this.raw.schema },
@@ -37,22 +37,22 @@ export class AwsDataApi {
     let isDDLStatement = false;
     // Transactional overwrites
     switch (true) {
-      case inputsql.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
-      case inputsql.trim().substr(0, 'START TRANSACTION'.length).toUpperCase() === 'START TRANSACTION':
+      case inputSQL.trim().substr(0, 'BEGIN'.length).toUpperCase() === 'BEGIN':
+      case inputSQL.trim().substr(0, 'START TRANSACTION'.length).toUpperCase() === 'START TRANSACTION':
         const beginRes = await this.raw.beginTransaction(AwsDataApiUtils.pick(cleanedParams, ['schema', 'database']));
         this._config.transactionId = beginRes.transactionId;
         return { transactionId: beginRes.transactionId };
 
-      case inputsql.trim().substr(0, 'DISCARD ALL'.length).toUpperCase() === 'DISCARD ALL':
-      case inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
-      case inputsql.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
+      case inputSQL.trim().substr(0, 'DISCARD ALL'.length).toUpperCase() === 'DISCARD ALL':
+      case inputSQL.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT':
+      case inputSQL.trim().substr(0, 'ROLLBACK'.length).toUpperCase() === 'ROLLBACK':
         const currentTransactionId = this._config.transactionId;
 
         if (currentTransactionId) {
-          if (inputsql.trim().substr(0, 'DISCARD ALL'.length).toUpperCase() === 'DISCARD ALL') {
-            inputsql = 'ROLLBACK';
+          if (inputSQL.trim().substr(0, 'DISCARD ALL'.length).toUpperCase() === 'DISCARD ALL') {
+            inputSQL = 'ROLLBACK';
           }
-          const isCommit = inputsql.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT';
+          const isCommit = inputSQL.trim().substr(0, 'COMMIT'.length).toUpperCase() === 'COMMIT';
 
           const params = {
             transactionId: currentTransactionId,
@@ -75,14 +75,14 @@ export class AwsDataApi {
           };
         }
 
-      case inputsql.trim().substr(0, 'CREATE'.length).toUpperCase() === 'CREATE':
-      case inputsql.trim().substr(0, 'DROP'.length).toUpperCase() === 'DROP':
-      case inputsql.trim().substr(0, 'ALTER'.length).toUpperCase() === 'ALTER':
+      case inputSQL.trim().substr(0, 'CREATE'.length).toUpperCase() === 'CREATE':
+      case inputSQL.trim().substr(0, 'DROP'.length).toUpperCase() === 'DROP':
+      case inputSQL.trim().substr(0, 'ALTER'.length).toUpperCase() === 'ALTER':
         isDDLStatement = true;
         break;
     }
 
-    const preparedSQL = AwsDataFormat.prepareSqlAndParams(inputsql, values, cleanedParams);
+    const preparedSQL = AwsDataFormat.prepareSqlAndParams(inputSQL, values, cleanedParams);
 
     // Create/format the parameters
     const params = {

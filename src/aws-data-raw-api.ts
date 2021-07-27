@@ -454,6 +454,33 @@ export class AwsDataRawApi {
           }
 
           if (err) {
+            if (err.code === 'ThrottlingException') {
+              console.warn('throttled', err, args);
+
+              setTimeout(() => {
+                // recover from throttled execution once
+                this._rds
+                  .executeStatement(params)
+                  .promise()
+                  .then(
+                    (data) => {
+                      this._dbState.isRunning = true;
+                      this._dbState.lastCheck = AwsDataApiUtils.getUnixEpochTimestamp();
+
+                      isResolved = true;
+                      return resolve(data);
+                    },
+                    (error) => {
+                      console.error('retry error', error);
+                      isResolved = true;
+                      return reject(err);
+                    },
+                  );
+              }, 200 + Math.floor(Math.random() * 2000));
+
+              return;
+            }
+
             if (err.code === 'BadRequestException') {
               if (err.message === "Array of type 'name' is not supported") {
                 (err as any).hint =
@@ -467,17 +494,20 @@ export class AwsDataRawApi {
                 console.warn((err as any).hint);
 
                 // recover from stale transactions
-                this.executeStatement({ ...args, sql: 'ROLLBACK' }).then(
-                  () => {
-                    isResolved = true;
-                    return reject(err);
-                  },
-                  (error) => {
-                    console.error('rollback error', error);
-                    isResolved = true;
-                    return reject(err);
-                  },
-                );
+                this._rds
+                  .executeStatement({ ...params, sql: 'ROLLBACK' })
+                  .promise()
+                  .then(
+                    () => {
+                      isResolved = true;
+                      return reject(err);
+                    },
+                    (error) => {
+                      console.error('rollback error', error);
+                      isResolved = true;
+                      return reject(err);
+                    },
+                  );
                 return;
               }
             }
@@ -525,7 +555,7 @@ export class AwsDataRawApi {
     });
   }
 
-  awaitCompleteOfAllPendingStatemets() {
+  awaitCompleteOfAllPendingStatements() {
     return this._semaphore.awaitFree();
   }
 }

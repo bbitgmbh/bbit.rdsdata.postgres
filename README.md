@@ -15,7 +15,6 @@ The goal of this project is to provide a node-postgres compatible client that co
 * General RDS Data API Client with
   * automatic SQL and parameters preparation to AWS format
   * automatic response parsing from AWS format
-  * promisified interfaces
   * configurable maximum concurrent sql statements, defaults to 1 per client instance
 
 ## How to use - Examples
@@ -114,7 +113,7 @@ await sequelize.close();
 When we started to go serverless with API Gateway and AWS Lambda, we soon recognized that RDS Database connection handling is hard. There are many great blog posts on the internet about, to summarize those:
 
 1. In an AWS Lambda, you shouldn't use connection pools and you should open/close the database connection on every event to prevent timeout issues and to prevent crashing the database server with too many concurrent connections.
-2. To be able to connect fast, you wanna use AWS RDS Proxy. RDS Proxy also helps prevent issues with maximal open concurrent connections to the database, so that lambda can scale without having to worry about that. But this also has a price tag
+2. To be able to connect fast, you wanna use AWS RDS Proxy. RDS Proxy also helps prevent issues with maximal open concurrent connections to the database, so that lambda can scale without having to worry about that. But this also has a price tag.
 3. To be able to connect at all, your AWS Lambda needs to be in a proper configured VPC. When your Lambda needs Internet-Access or needs to access an AWS resource where you didn't set up a VPC Endpoint, you need at least one NAT-Gateway, which also has a price tag.
 
 If you wanna go around all those challenges, there is the AWS RDS Data API, which lets you execute SQL statements over HTTP with the usual AWS IAM authentication. But this introduces other challenges:
@@ -151,11 +150,11 @@ GROUP BY i.relname ORDER BY i.relname
 
 
 ## Performance
-some manual comparisons showed that executing statements over Data API has little overhead (middle two digit millisecs).
+some manual comparisons showed that executing statements over Data API has little overhead (middle two digit milliseconds).
 ### Tips
 * Reuse HTTP-Connections with keep-alive
   * Either set environment variable AWS_NODEJS_CONNECTION_REUSE_ENABLED = 1
-  * or inject your preprepared HTTP client in AWS-SDK, for details see: https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/node-reusing-connections.html
+  * or inject your prepared HTTP client in AWS-SDK, for details see: https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/node-reusing-connections.html
 
 ## How to setup AWS RDS Data API
 See https://github.com/jeremydaly/data-api-client#enabling-data-api

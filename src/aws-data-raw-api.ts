@@ -476,7 +476,7 @@ export class AwsDataRawApi {
                       return reject(err);
                     },
                   );
-              }, 200 + Math.floor(Math.random() * 2000));
+              }, 2000 + Math.floor(Math.random() * 3000));
 
               return;
             }

@@ -1,6 +1,6 @@
 {
   "name": "@bbitgmbh/bbit.rdsdata.postgres",
-  "version": "0.19.1",
+  "version": "0.20.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
